@@ -139,8 +139,10 @@ export const getAllStudents = (collegeId: string): Student[] => {
     totalFee: s.totalFee || 120000,
     paidAmount: s.paidAmount || (s.feeStatus === "full" ? 120000 : s.feeStatus === "half" ? 60000 : 0),
     totalClasses: s.totalClasses || 100,
-    attendedClasses: s.attendancePercentage || s.attendedClasses || 100,
-    attendancePercentage: s.attendancePercentage || 100,
+    attendedClasses: s.attendedClasses ?? (s.attendancePercentage ? Math.round((s.attendancePercentage / 100) * (s.totalClasses || 100)) : 100),
+    attendancePercentage: s.totalClasses && s.totalClasses > 0
+      ? Math.round(((s.attendedClasses ?? s.attendancePercentage ?? 100) / s.totalClasses) * 100)
+      : (s.attendancePercentage || 100),
     admissionDate: s.admissionDate || s.admission_date || new Date().toISOString().split("T")[0],
     college_name: s.college_name || s.collegeName,
     college_id: s.college_id || s.collegeId
@@ -222,6 +224,26 @@ export function recordDailyAttendance(date: string, attendanceRecord: Record<str
 
   try {
     localStorage.setItem("dailyLedger", JSON.stringify(dailyLedger));
+
+    // Persist updated attendance stats back into master student storage
+    const allStoredStudents: any[] = JSON.parse(localStorage.getItem('mock_generated_students') || '[]');
+    const targetMap = new Map(targetStudents.map(s => [s.id, s]));
+
+    const updatedStored = allStoredStudents.map(stored => {
+      const updated = targetMap.get(stored.id);
+      if (updated) {
+        const pct = updated.totalClasses === 0 ? 0 : Math.round((updated.attendedClasses / updated.totalClasses) * 100);
+        return {
+          ...stored,
+          totalClasses: updated.totalClasses,
+          attendedClasses: updated.attendedClasses,
+          attendancePercentage: pct,
+        };
+      }
+      return stored;
+    });
+
+    localStorage.setItem('mock_generated_students', JSON.stringify(updatedStored));
   } catch (e) {
     console.warn("Could not save daily ledger to local storage", e);
   }

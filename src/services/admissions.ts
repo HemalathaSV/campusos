@@ -16,6 +16,10 @@ export interface ApplicationData {
   entranceExam?: string;
   rank?: number;
   allocatedBranch?: string;
+  branchPreference?: string;
+  collegeName?: string;
+  collegeId?: string;
+  college_id?: string;
 }
 
 const dummyApps: ApplicationData[] = [
@@ -31,12 +35,19 @@ const dummyApps: ApplicationData[] = [
   { id: "app-10", user_id: "u10", name: "Neha S", email: "nehas@gmail.com", phone: "9812347650", branch: "Information Technology", amount: 140000, status: 'pending', payment: 'paid', date: '2026-03-30' },
 ];
 
+export const STORAGE_KEY_APPLICATIONS = 'mock_applications_v3';
+
 export const subscribeToApplications = (callback: (apps: ApplicationData[]) => void) => {
   const getApps = () => {
-    let apps = JSON.parse(localStorage.getItem('mock_applications_v3') || 'null');
+    let apps = JSON.parse(localStorage.getItem(STORAGE_KEY_APPLICATIONS) || 'null');
     if (!apps) {
-      apps = dummyApps.map(app => ({...app, collegeName: "MIT College", collegeId: "mit-college-id", status: "pending"}));
-      localStorage.setItem('mock_applications_v3', JSON.stringify(apps));
+      const legacyApps = JSON.parse(localStorage.getItem('mock_applications_v2') || 'null');
+      if (legacyApps && legacyApps.length > 0) {
+        apps = legacyApps;
+      } else {
+        apps = dummyApps.map(app => ({...app, collegeName: "MIT College", collegeId: "mit-college-id", status: "pending"}));
+      }
+      localStorage.setItem(STORAGE_KEY_APPLICATIONS, JSON.stringify(apps));
     }
     const currentCollegeId = localStorage.getItem('activeCollegeId') || 'mit-college-id';
     return apps.filter((a: any) => a.collegeId === currentCollegeId || a.college_id === currentCollegeId || (!a.collegeId && !a.college_id && currentCollegeId === 'mit-college-id'));
@@ -56,14 +67,15 @@ export const updateApplicationStatus = async (
   id: string, 
   status: string
 ) => {
-  const apps: ApplicationData[] = JSON.parse(localStorage.getItem('mock_applications_v3') || '[]');
+  const apps: ApplicationData[] = JSON.parse(localStorage.getItem(STORAGE_KEY_APPLICATIONS) || '[]');
   const appIndex = apps.findIndex(app => app.id === id);
   if (appIndex === -1) return;
   
   const app = apps[appIndex];
   
   apps[appIndex] = { ...app, status };
-  localStorage.setItem('mock_applications_v3', JSON.stringify(apps));
+  localStorage.setItem(STORAGE_KEY_APPLICATIONS, JSON.stringify(apps));
+  localStorage.setItem('mock_applications_v2', JSON.stringify(apps));
 
   // If approved, create a real student record for auth bypass and permanent access
   if (status === 'Pay') {
@@ -87,9 +99,38 @@ export const updateApplicationStatus = async (
   }
 };
 
-export const createApplication = async (appData: Omit<ApplicationData, "id">) => {
-  let apps: ApplicationData[] = JSON.parse(localStorage.getItem('mock_applications_v3') || '[]');
-  const newApp = { ...appData, id: `app-${Date.now()}`, collegeName: localStorage.getItem('activeCollegeName') || 'MIT College', college_id: localStorage.getItem('activeCollegeId') || 'mit-college-id' } as any;
+export const createApplication = async (appData: Partial<ApplicationData>) => {
+  let apps: ApplicationData[] = JSON.parse(localStorage.getItem(STORAGE_KEY_APPLICATIONS) || '[]');
+  if (!apps || apps.length === 0) {
+    const legacyApps = JSON.parse(localStorage.getItem('mock_applications_v2') || 'null');
+    apps = legacyApps && legacyApps.length > 0 ? legacyApps : dummyApps.map(app => ({...app, collegeName: "MIT College", collegeId: "mit-college-id", status: "pending"}));
+  }
+  
+  const collegeName = localStorage.getItem('activeCollegeName') || 'MIT College';
+  const collegeId = localStorage.getItem('activeCollegeId') || 'mit-college-id';
+  
+  const newApp: ApplicationData = {
+    id: appData.id || `app-${Date.now()}`,
+    user_id: appData.user_id || `u-${Date.now()}`,
+    name: appData.name || '',
+    email: appData.email || '',
+    phone: appData.phone || '+91 9999999999',
+    branch: appData.branch || 'Computer Science',
+    amount: appData.amount || 0,
+    status: appData.status || 'pending',
+    payment: appData.payment || 'no_payment',
+    date: appData.date || new Date().toISOString().split("T")[0],
+    entranceExam: appData.entranceExam,
+    rank: appData.rank,
+    allocatedBranch: appData.allocatedBranch,
+    branchPreference: appData.branchPreference,
+    collegeName,
+    collegeId,
+    college_id: collegeId,
+  };
+  
   apps = [newApp, ...apps];
-  localStorage.setItem('mock_applications_v3', JSON.stringify(apps));
+  localStorage.setItem(STORAGE_KEY_APPLICATIONS, JSON.stringify(apps));
+  localStorage.setItem('mock_applications_v2', JSON.stringify(apps));
+  return newApp;
 };

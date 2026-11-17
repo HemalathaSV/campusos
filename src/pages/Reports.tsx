@@ -1,24 +1,27 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select as CustomSelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { students, branches } from "@/data/seedData";
+import { getAllStudents, branches } from "@/data/seedData";
+import { useAuth } from "@/contexts/AuthContext";
 import { FileText, Download, Printer } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 type ReportType = "student" | "fee" | "attendance";
 
 export default function Reports() {
+  const { collegeId } = useAuth();
   const [reportType, setReportType] = useState<ReportType>("student");
   const [branchFilter, setBranchFilter] = useState("all");
 
-  const filtered = branchFilter === "all" ? students : students.filter(s => s.branch.id === branchFilter);
+  const allStudents = useMemo(() => getAllStudents(collegeId), [collegeId]);
+  const filtered = branchFilter === "all" ? allStudents : allStudents.filter(s => s.branch.id === branchFilter);
 
   const feeData = branches.map(b => {
-    const branchStudents = students.filter(s => s.branch.id === b.id);
+    const branchStudents = allStudents.filter(s => s.branch.id === b.id);
     return {
       name: b.code,
       collected: branchStudents.reduce((sum, s) => sum + s.paidAmount, 0) / 100000,
@@ -27,10 +30,10 @@ export default function Reports() {
   });
 
   const attendanceData = branches.map(b => {
-    const branchStudents = students.filter(s => s.branch.id === b.id);
+    const branchStudents = allStudents.filter(s => s.branch.id === b.id);
     return {
       name: b.code,
-      avg: Math.round(branchStudents.reduce((sum, s) => sum + s.attendancePercentage, 0) / branchStudents.length),
+      avg: branchStudents.length === 0 ? 0 : Math.round(branchStudents.reduce((sum, s) => sum + s.attendancePercentage, 0) / branchStudents.length),
       below75: branchStudents.filter(s => s.attendancePercentage < 75).length,
     };
   });

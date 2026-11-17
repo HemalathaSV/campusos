@@ -8,6 +8,7 @@ import { Select as CustomSelect, SelectContent, SelectItem, SelectTrigger, Selec
 import { branches } from "@/data/seedData";
 import { GraduationCap, ArrowLeft, Send } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { createApplication } from "@/services/admissions";
 
 export default function AdmissionApply() {
   const navigate = useNavigate();
@@ -85,21 +86,17 @@ export default function AdmissionApply() {
     
     setLoading(true);
     
-    setTimeout(() => {
+    setTimeout(async () => {
       const allocated = determineBranch(formData.entranceExam, rankNum) || "Undeclared";
       const today = new Date().toISOString().split("T")[0];
       setAllocatedBranch(allocated);
       setAdmissionDate(today);
 
-      const existingDb = localStorage.getItem("mock_applications_v2");
-      const apps = existingDb ? JSON.parse(existingDb) : [];
-      
-      const newApp = {
-        id: `app-${Date.now()}`,
+      await createApplication({
         name: formData.name,
         email: formData.email,
-        phone: "+91 9999999999", // Mock fallback for unused field
-        branch: allocated, 
+        phone: "+91 9999999999",
+        branch: allocated,
         allocatedBranch: allocated,
         branchPreference: formData.branchPreference || allocated,
         entranceExam: formData.entranceExam,
@@ -108,13 +105,7 @@ export default function AdmissionApply() {
         status: "pending",
         payment: "no_payment",
         date: today,
-        user_id: `u-${Date.now()}`,
-        collegeName: localStorage.getItem("activeCollegeName") || "MIT College",
-        college_id: localStorage.getItem("activeCollegeId") || "mit-college-id"
-      };
-      
-      apps.unshift(newApp);
-      localStorage.setItem("mock_applications_v2", JSON.stringify(apps));
+      });
       
       setLoading(false);
       setStep("success");

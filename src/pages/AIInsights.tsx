@@ -2,13 +2,16 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { students } from "@/data/seedData";
+import { getAllStudents } from "@/data/seedData";
+import { useAuth } from "@/contexts/AuthContext";
 import { Brain, AlertTriangle, TrendingDown, Lightbulb, Target } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 
 const COLORS = ["hsl(0,72%,51%)", "hsl(38,92%,50%)", "hsl(152,69%,40%)"];
 
 export default function AIInsights() {
+  const { collegeId } = useAuth();
+  const students = getAllStudents(collegeId);
   const feeDefaulters = students.filter(s => s.feeStatus === "pending").sort((a, b) => a.attendancePercentage - b.attendancePercentage);
   const lowAttendance = students.filter(s => s.attendancePercentage < 75).sort((a, b) => a.attendancePercentage - b.attendancePercentage);
 

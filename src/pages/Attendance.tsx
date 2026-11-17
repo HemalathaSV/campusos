@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +30,7 @@ export default function Attendance() {
   }, [activeStudents, branchFilter, yearFilter]);
 
   // Initialize attendance
-  useMemo(() => {
+  useEffect(() => {
     const init: Record<string, boolean> = {};
     const record = dailyLedger[date];
     filtered.forEach(s => { 
@@ -42,7 +42,7 @@ export default function Attendance() {
     });
     setAttendance(init);
     setSaved(!!record);
-  }, [branchFilter, yearFilter, date]);
+  }, [branchFilter, yearFilter, date, filtered]);
 
   const toggleAttendance = (id: string) => {
     setAttendance(prev => ({ ...prev, [id]: !prev[id] }));

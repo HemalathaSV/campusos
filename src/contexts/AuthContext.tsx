@@ -194,7 +194,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Pending Application Check
       if (!mockRole) {
-        const applications = JSON.parse(localStorage.getItem('mock_applications_v2') || localStorage.getItem('mock_applications') || '[]');
+        const applications = JSON.parse(
+          localStorage.getItem('mock_applications_v3') || 
+          localStorage.getItem('mock_applications_v2') || 
+          localStorage.getItem('mock_applications') || 
+          '[]'
+        );
         const pendingApp = applications.find((a: any) => a.email === email && (a.college_id === actualCollegeId || a.collegeId === actualCollegeId || (!a.college_id && actualCollegeId === 'mit-college-id')));
         
         if (pendingApp && (pendingApp.status !== "approved" && pendingApp.status !== "Pay")) {
