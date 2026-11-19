@@ -141,19 +141,109 @@ export function getPerformanceRemark(totalMarks: number, internal: number, exter
   };
 }
 
+const STORAGE_KEY_UNIFIED_MARKS = "campusos_unified_marks_v2";
+
+export function getUnifiedMarksStore(): Record<string, Record<string, { internal: number; external: number }>> {
+  if (typeof window === "undefined" || !window.localStorage) return {};
+  const stored = localStorage.getItem(STORAGE_KEY_UNIFIED_MARKS);
+  if (stored) {
+    try {
+      return JSON.parse(stored);
+    } catch {}
+  }
+  return {};
+}
+
+export function saveCourseMarksForRoster(
+  courseCode: string,
+  marksMap: Record<string, { internal: number; external: number }>
+): void {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  const store = getUnifiedMarksStore();
+  store[courseCode] = {
+    ...(store[courseCode] || {}),
+    ...marksMap,
+  };
+  localStorage.setItem(STORAGE_KEY_UNIFIED_MARKS, JSON.stringify(store));
+}
+
+export function getStudentCourseMarks(
+  studentId: string,
+  courseCode: string,
+  courseSemester: number,
+  courseIdx: number = 0
+): { internal: number; external: number } {
+  const store = getUnifiedMarksStore();
+  if (store[courseCode]?.[studentId]) {
+    return store[courseCode][studentId];
+  }
+
+  // Check cleared backlogs in localStorage
+  let clearedBacklogs: string[] = [];
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      clearedBacklogs = JSON.parse(localStorage.getItem(`cleared_backlogs_${studentId}`) || "[]");
+    } catch {}
+  }
+
+  if (clearedBacklogs.includes(courseCode)) {
+    return { internal: 28, external: 44 }; // Cleared with total 72 (Pass)
+  }
+
+  // Deterministic seed per student
+  let seed = 0;
+  for (let i = 0; i < studentId.length; i++) {
+    seed = (seed + studentId.charCodeAt(i) * (i + 1) * 17) % 10000;
+  }
+  let courseHash = 0;
+  for (let i = 0; i < courseCode.length; i++) {
+    courseHash = (courseHash + courseCode.charCodeAt(i) * 31) % 1000;
+  }
+
+  // Backlog determination:
+  // 1. student-5 (Arjun Reddy) has backlog in CS202
+  // 2. Controlled cohort arrears for students where seed % 5 === 0 (in semester 2)
+  const isArjunReddyBacklog = studentId === "student-5" && courseCode === "CS202";
+  const isCohortSimulatedBacklog = (seed % 5 === 0) && courseSemester === 2 && courseIdx === 1;
+
+  if (isArjunReddyBacklog || isCohortSimulatedBacklog) {
+    return { internal: 12, external: 18 }; // Fail: Total 30 (Grade F)
+  }
+
+  // Natural bell-curve mark variation across all students
+  const combined = (seed + courseHash + courseSemester * 19) % 100;
+  let internal: number;
+  let external: number;
+
+  if (combined >= 85) {
+    // High distinction tier (90-98)
+    internal = 36 + (combined % 5);
+    external = 54 + (combined % 7);
+  } else if (combined >= 65) {
+    // Distinction tier (76-89)
+    internal = 30 + (combined % 8);
+    external = 44 + (combined % 13);
+  } else if (combined >= 35) {
+    // First class tier (62-75)
+    internal = 25 + (combined % 8);
+    external = 37 + (combined % 12);
+  } else if (combined >= 15) {
+    // Second class tier (50-61)
+    internal = 20 + (combined % 6);
+    external = 30 + (combined % 8);
+  } else {
+    // Borderline clearance (40-49)
+    internal = 16 + (combined % 5);
+    external = 24 + (combined % 7);
+  }
+
+  return { internal, external };
+}
+
 export function generateStudentAcademicRecord(studentId: string, branchId: string = "cs", year: number = 2) {
   const branchList = branchCourses.filter(c => c.branchId === branchId);
   const currentSemester = Math.min(year * 2, 8);
   
-  // Deterministic seed based on studentId
-  let seed = 0;
-  for (let i = 0; i < studentId.length; i++) {
-    seed = (seed + studentId.charCodeAt(i) * (i + 1)) % 1000;
-  }
-
-  // Check for student-specific overrides in localStorage (e.g. cleared backlogs)
-  const clearedBacklogs: string[] = JSON.parse(localStorage.getItem(`cleared_backlogs_${studentId}`) || "[]");
-
   const semesters: SemesterResult[] = [];
   const allBacklogs: StudentCourseGrade[] = [];
 
@@ -173,19 +263,8 @@ export function generateStudentAcademicRecord(studentId: string, branchId: strin
     let semEarnedCredits = 0;
 
     const courseGrades: StudentCourseGrade[] = coursesForSem.map((course, idx) => {
-      // Deterministic grade distribution
-      let internal = 28 + ((seed + idx * 7 + sem * 11) % 12);
-      let external = 40 + ((seed * 3 + idx * 13 + sem * 5) % 19);
-
-      // Controlled backlog simulation for students with seed % 5 === 0 (approx 20% of cohort)
-      // Only for earlier semesters
-      const isSimulatedBacklog = (seed % 4 === 0) && sem === 2 && idx === 1 && !clearedBacklogs.includes(course.code);
-
-      if (isSimulatedBacklog) {
-        internal = 12;
-        external = 18;
-      }
-
+      // Pull from the single unified marks store
+      const { internal, external } = getStudentCourseMarks(studentId, course.code, sem, idx);
       const total = internal + external;
       const { gradePoint, gradeLetter, status } = calculateGrade(total);
 

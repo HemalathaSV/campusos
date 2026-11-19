@@ -22,7 +22,7 @@ interface AuthContextType {
   signIn: (email: string, password: string, expectedRole?: UserRole) => Promise<void>;
   signUp: (email: string, password: string, fullName: string, role: UserRole, department?: string) => Promise<void>;
   signOut: () => Promise<void>;
-  setDemoRole: (role: UserRole) => void;
+  setDemoRole: (role: UserRole, specificProfile?: { id: string; name: string; email?: string }) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -272,13 +272,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const setDemoRole = (r: UserRole) => {
+  const setDemoRole = (r: UserRole, specificProfile?: { id: string; name: string; email?: string }) => {
     setRole(r);
-    const mockProfile = r === "student"
+    let mockProfile = r === "student"
       ? { id: "student-1", name: "Aarav Sharma", email: "aarav1@gmail.com" }
       : r === "faculty"
       ? { id: "faculty-1", name: "Dr. Ramesh Kumar", email: "ranjith.kc@gmail.com" }
       : { id: "admin-1", name: "Principal Office", email: "admin@gmail.com" };
+
+    if (specificProfile) {
+      mockProfile = {
+        id: specificProfile.id,
+        name: specificProfile.name,
+        email: specificProfile.email || `${specificProfile.id}@campusos.edu`,
+      };
+    }
 
     const mockObj = {
       uid: mockProfile.id,

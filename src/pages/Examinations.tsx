@@ -13,6 +13,10 @@ import { getAllStudents, branches } from "@/data/seedData";
 import {
   branchCourses,
   calculateGrade,
+  getPerformanceRemark,
+  getUnifiedMarksStore,
+  saveCourseMarksForRoster,
+  getStudentCourseMarks,
   generateStudentAcademicRecord,
   registerSupplementaryExam,
   getSupplementaryRegistrations,
@@ -58,10 +62,21 @@ export default function Examinations() {
   const { role, user, collegeId } = useAuth();
   const allStudents = useMemo(() => getAllStudents(collegeId), [collegeId]);
 
-  // Current student identity for student portal view
+  // Selectable student identity for student portal view
+  const [selectedStudentId, setSelectedStudentId] = useState<string>(() => {
+    return (user as any)?.uid || "student-1";
+  });
+
+  // Sync with auth user switch
+  useEffect(() => {
+    if ((user as any)?.uid) {
+      setSelectedStudentId((user as any)?.uid);
+    }
+  }, [(user as any)?.uid]);
+
   const currentStudent = useMemo(() => {
-    return allStudents.find(s => s.id === (user as any)?.uid) || allStudents[0];
-  }, [allStudents, user]);
+    return allStudents.find(s => s.id === selectedStudentId) || allStudents[0];
+  }, [allStudents, selectedStudentId]);
 
   // Student academic transcript record
   const studentAcademicRecord = useMemo(() => {
@@ -70,7 +85,16 @@ export default function Examinations() {
   }, [currentStudent]);
 
   // Student selected semester tab
-  const [selectedSemester, setSelectedSemester] = useState<number>(studentAcademicRecord.semesters.length || 1);
+  const [selectedSemester, setSelectedSemester] = useState<number>(() => studentAcademicRecord.semesters.length || 1);
+
+  // Sync selected semester when student changes
+  useEffect(() => {
+    if (studentAcademicRecord.semesters.length > 0) {
+      if (selectedSemester > studentAcademicRecord.semesters.length || !studentAcademicRecord.semesters.some(s => s.semester === selectedSemester)) {
+        setSelectedSemester(studentAcademicRecord.semesters.length);
+      }
+    }
+  }, [studentAcademicRecord]);
 
   // Supplementary registrations state
   const [supplementaryList, setSupplementaryList] = useState<SupplementaryRegistration[]>(() =>
@@ -194,28 +218,26 @@ export default function Examinations() {
   // Editable marks map: studentId -> { internal: number, external: number }
   const [marksState, setMarksState] = useState<Record<string, { internal: number; external: number }>>({});
 
-  // Initialize marks from storage or generator
+  // Initialize marks from unified store or getStudentCourseMarks
   useEffect(() => {
-    const storageKey = `exam_marks_${facultyCourseCode}_${collegeId}`;
-    const stored = localStorage.getItem(storageKey);
-    if (stored) {
-      try {
-        setMarksState(JSON.parse(stored));
-        return;
-      } catch {}
-    }
+    const unifiedStore = getUnifiedMarksStore();
+    const courseStore = unifiedStore[facultyCourseCode] || {};
 
-    // Default seeded marks for roster
     const initialMap: Record<string, { internal: number; external: number }> = {};
     rosterStudents.forEach((student, index) => {
-      const seed = (index * 7 + parseInt(facultySemester) * 13) % 15;
-      initialMap[student.id] = {
-        internal: Math.min(40, 26 + seed),
-        external: Math.min(60, 38 + seed * 2),
-      };
+      if (courseStore[student.id]) {
+        initialMap[student.id] = courseStore[student.id];
+      } else {
+        initialMap[student.id] = getStudentCourseMarks(
+          student.id,
+          facultyCourseCode,
+          parseInt(facultySemester),
+          index
+        );
+      }
     });
     setMarksState(initialMap);
-  }, [facultyCourseCode, rosterStudents, collegeId, facultySemester]);
+  }, [facultyCourseCode, rosterStudents, facultySemester]);
 
   const handleScoreChange = (studentId: string, field: "internal" | "external", valStr: string) => {
     const max = field === "internal" ? 40 : 60;
@@ -230,16 +252,15 @@ export default function Examinations() {
   };
 
   const handleSaveMarks = () => {
-    const storageKey = `exam_marks_${facultyCourseCode}_${collegeId}`;
-    localStorage.setItem(storageKey, JSON.stringify(marksState));
+    saveCourseMarksForRoster(facultyCourseCode, marksState);
     toast({
-      title: "Grades Saved Successfully",
-      description: `Evaluation records updated for ${facultyCourseCode} (${rosterStudents.length} students).`,
+      title: "Grades Saved & Synchronized",
+      description: `Evaluation records updated for ${facultyCourseCode} (${rosterStudents.length} students). Transcripts across faculty and student portals are now synchronized.`,
     });
 
     addNotification({
       title: "Exam Marks Published",
-      message: `Results published for ${facultyCourseCode} (${rosterStudents.length} students).`,
+      message: `Results published for ${facultyCourseCode} (${rosterStudents.length} students). Official transcripts updated.`,
       type: "success",
       targetRole: "all",
     });
@@ -273,6 +294,14 @@ export default function Examinations() {
           accessor: s => {
             const tot = (marksState[s.id]?.internal ?? 0) + (marksState[s.id]?.external ?? 0);
             return calculateGrade(tot).status;
+          },
+        },
+        {
+          header: "Improvement Diagnostic",
+          accessor: s => {
+            const intM = marksState[s.id]?.internal ?? 0;
+            const extM = marksState[s.id]?.external ?? 0;
+            return getPerformanceRemark(intM + extM, intM, extM).recommendation;
           },
         },
       ]
@@ -319,6 +348,64 @@ export default function Examinations() {
            ========================================================================= */}
         {role === "student" ? (
           <div className="space-y-6">
+            {/* Student Record Selector & Identity Banner */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-primary/20 bg-primary/5">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`h-11 w-11 rounded-xl flex items-center justify-center font-bold text-lg shadow-sm ${
+                    studentAcademicRecord.activeBacklogsCount > 0
+                      ? "bg-destructive/15 text-destructive border border-destructive/30"
+                      : "bg-primary/15 text-primary border border-primary/30"
+                  }`}
+                >
+                  {currentStudent?.name?.charAt(0) || "S"}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-base">{currentStudent?.name}</span>
+                    <Badge variant="outline" className="text-xs font-mono font-semibold">
+                      {currentStudent?.usn}
+                    </Badge>
+                    {studentAcademicRecord.activeBacklogsCount > 0 ? (
+                      <Badge variant="destructive" className="text-xs font-semibold gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        {studentAcademicRecord.activeBacklogsCount} Active Backlog (CS202)
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-success/15 text-success border-0 text-xs font-semibold gap-1">
+                        <Check className="h-3 w-3" /> All Clear (0 Backlogs)
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Branch: {typeof currentStudent?.branch === "object" ? currentStudent.branch.name : "Computer Science"} • Year {currentStudent?.year} • Current Sem {studentAcademicRecord.semesters.length}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 sm:self-center">
+                <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                  Switch Student Profile:
+                </label>
+                <select
+                  value={selectedStudentId}
+                  onChange={e => setSelectedStudentId(e.target.value)}
+                  className="h-9 px-3 text-xs rounded-lg border border-input bg-background font-medium focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
+                >
+                  <option value="student-1">Aarav Sharma (1SI22CS001 - Clear, 0 Backlogs)</option>
+                  <option value="student-5">Arjun Reddy (1SI22CS005 - ⚠️ 1 Backlog in CS202)</option>
+                  {allStudents.slice(0, 15).map(st => {
+                    if (st.id === "student-1" || st.id === "student-5") return null;
+                    return (
+                      <option key={st.id} value={st.id}>
+                        {st.name} ({st.usn})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            </div>
+
             {/* Top Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Card className="border-border/50 bg-gradient-to-br from-primary/10 via-transparent to-transparent">
@@ -330,8 +417,24 @@ export default function Examinations() {
                     <p className="text-3xl font-display font-bold text-primary">
                       {studentAcademicRecord.cgpa} <span className="text-sm text-muted-foreground font-normal">/ 10.0</span>
                     </p>
-                    <Badge className="bg-success/15 text-success border-0 text-xs mt-2">
-                      First Class with Distinction
+                    <Badge
+                      className={`border-0 text-xs mt-2 ${
+                        studentAcademicRecord.cgpa >= 8.5
+                          ? "bg-success/15 text-success"
+                          : studentAcademicRecord.cgpa >= 7.0
+                          ? "bg-primary/15 text-primary"
+                          : studentAcademicRecord.cgpa >= 5.5
+                          ? "bg-warning/15 text-warning"
+                          : "bg-destructive/15 text-destructive"
+                      }`}
+                    >
+                      {studentAcademicRecord.cgpa >= 8.5
+                        ? "First Class with Distinction"
+                        : studentAcademicRecord.cgpa >= 7.0
+                        ? "First Class"
+                        : studentAcademicRecord.cgpa >= 5.5
+                        ? "Second Class"
+                        : "Pass Class"}
                     </Badge>
                   </div>
                   <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
@@ -586,7 +689,9 @@ export default function Examinations() {
                         <TableCell className="text-center">
                           <Badge
                             className={`border-0 text-xs font-bold ${
-                              course.gradeLetter === "O" || course.gradeLetter === "A+"
+                              course.gradeLetter === "F"
+                                ? "bg-destructive/15 text-destructive"
+                                : course.gradeLetter === "O" || course.gradeLetter === "A+"
                                 ? "bg-success/15 text-success"
                                 : course.gradeLetter === "A" || course.gradeLetter === "B+"
                                 ? "bg-primary/15 text-primary"
@@ -597,7 +702,14 @@ export default function Examinations() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">
-                          <Badge variant="outline" className="text-xs bg-success/5 text-success border-success/30">
+                          <Badge
+                            variant="outline"
+                            className={`text-xs ${
+                              course.status === "Pass"
+                                ? "bg-success/5 text-success border-success/30"
+                                : "bg-destructive/10 text-destructive border-destructive/30"
+                            }`}
+                          >
                             {course.status}
                           </Badge>
                         </TableCell>
@@ -623,8 +735,16 @@ export default function Examinations() {
                       Semester SGPA: <strong className="text-primary text-base">{currentSemesterResult.sgpa}</strong>
                     </span>
                   </div>
-                  <Badge className="bg-success text-success-foreground border-0 py-1 px-3">
-                    Semester Result: PASSED
+                  <Badge
+                    className={`border-0 py-1 px-3 ${
+                      currentSemesterResult.courses.some(c => c.status === "Fail")
+                        ? "bg-destructive text-destructive-foreground"
+                        : "bg-success text-success-foreground"
+                    }`}
+                  >
+                    {currentSemesterResult.courses.some(c => c.status === "Fail")
+                      ? "Semester Result: BACKLOG RECORDED"
+                      : "Semester Result: PASSED"}
                   </Badge>
                 </div>
               </CardContent>
@@ -773,6 +893,7 @@ export default function Examinations() {
                           <TableHead className="text-center">Total (100)</TableHead>
                           <TableHead className="text-center">Grade</TableHead>
                           <TableHead className="text-center">Status</TableHead>
+                          <TableHead>Diagnostic Guidance & Improvement Plan</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -780,6 +901,7 @@ export default function Examinations() {
                           const m = marksState[student.id] || { internal: 30, external: 45 };
                           const total = m.internal + m.external;
                           const { gradeLetter, status } = calculateGrade(total);
+                          const remark = getPerformanceRemark(total, m.internal, m.external);
 
                           return (
                             <TableRow key={student.id}>
@@ -817,7 +939,9 @@ export default function Examinations() {
                               <TableCell className="text-center">
                                 <Badge
                                   className={`border-0 font-bold ${
-                                    gradeLetter === "O" || gradeLetter === "A+"
+                                    gradeLetter === "F"
+                                      ? "bg-destructive/15 text-destructive"
+                                      : gradeLetter === "O" || gradeLetter === "A+"
                                       ? "bg-success/15 text-success"
                                       : gradeLetter === "A" || gradeLetter === "B+"
                                       ? "bg-primary/15 text-primary"
@@ -838,6 +962,12 @@ export default function Examinations() {
                                 >
                                   {status}
                                 </Badge>
+                              </TableCell>
+                              <TableCell className="text-xs max-w-xs">
+                                <span className="font-semibold text-foreground block">{remark.remark}</span>
+                                <span className="text-[11px] text-muted-foreground block truncate" title={remark.recommendation}>
+                                  {remark.recommendation}
+                                </span>
                               </TableCell>
                             </TableRow>
                           );

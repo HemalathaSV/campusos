@@ -124,21 +124,42 @@ export function Topbar() {
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" className="h-8 text-xs capitalize gap-1.5 font-medium border-border/80">
             <span className="h-2 w-2 rounded-full bg-success animate-pulse"></span>
-            Role: {role}
+            Role: {role}{role === "student" && user?.fullName ? ` (${user.fullName.split(" ")[0]})` : ""}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="text-xs w-48">
+        <DropdownMenuContent align="end" className="text-xs w-60">
           <div className="px-2 py-1.5 font-semibold text-[11px] text-muted-foreground border-b border-border/50">
-            Switch Demo Role
+            Switch Demo Persona
           </div>
-          <DropdownMenuItem onClick={() => setDemoRole("student")} className="cursor-pointer">
-            Student (Aarav Sharma)
+          <DropdownMenuItem 
+            onClick={() => setDemoRole("student", { id: "student-1", name: "Aarav Sharma", email: "aarav1@gmail.com" })} 
+            className="cursor-pointer flex flex-col items-start gap-0.5"
+          >
+            <span className="font-medium">Student: Aarav Sharma</span>
+            <span className="text-[10px] text-muted-foreground">1SI22CS001 • Sem 3 • 0 Backlogs</span>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setDemoRole("faculty")} className="cursor-pointer">
-            Faculty (Dr. Ramesh)
+          <DropdownMenuItem 
+            onClick={() => setDemoRole("student", { id: "student-5", name: "Arjun Reddy", email: "arjun5@gmail.com" })} 
+            className="cursor-pointer flex flex-col items-start gap-0.5 bg-destructive/5 hover:bg-destructive/10"
+          >
+            <span className="font-medium text-destructive flex items-center gap-1">
+              Student: Arjun Reddy ⚠️
+            </span>
+            <span className="text-[10px] text-muted-foreground">1SI22CS005 • Sem 2 • 1 Backlog (CS202)</span>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setDemoRole("admin")} className="cursor-pointer">
-            Admin (Dean Office)
+          <DropdownMenuItem 
+            onClick={() => setDemoRole("faculty")} 
+            className="cursor-pointer flex flex-col items-start gap-0.5"
+          >
+            <span className="font-medium">Faculty: Dr. Ramesh Kumar</span>
+            <span className="text-[10px] text-muted-foreground">CS Dept • Marks Evaluation & Tracking</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem 
+            onClick={() => setDemoRole("admin")} 
+            className="cursor-pointer flex flex-col items-start gap-0.5"
+          >
+            <span className="font-medium">Admin: Dean / Principal</span>
+            <span className="text-[10px] text-muted-foreground">College-wide Oversight & Analytics</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
