@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { subscribeToApplications, updateApplicationStatus, ApplicationData } from "@/services/admissions";
 import { useAuth } from "@/contexts/AuthContext";
+import { addNotification } from "@/services/notifications";
 
 export default function Admissions() {
   const { user } = useAuth();
@@ -51,6 +52,15 @@ export default function Admissions() {
       className: status === "Pay" 
         ? "border-green-600 bg-green-50 text-green-900 shadow-lg animate-in slide-in-from-bottom border-2 font-medium" 
         : "border-red-600 bg-red-50 text-red-900 shadow-lg animate-in slide-in-from-bottom border-2 font-medium",
+    });
+
+    addNotification({
+      title: status === "Pay" ? "Admission Approved" : "Admission Rejected",
+      message: status === "Pay"
+        ? `Application for ${name} was approved for admission.`
+        : `Application for ${name} was rejected.`,
+      type: status === "Pay" ? "success" : "warning",
+      targetRole: "admin",
     });
   };
 

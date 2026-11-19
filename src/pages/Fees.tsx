@@ -12,6 +12,7 @@ import { toast } from "@/hooks/use-toast";
 import { listenForPaymentSMS } from "@/utils/smsListener";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAllStudents } from "@/data/seedData";
+import { addNotification } from "@/services/notifications";
 
 export default function Fees() {
   const { collegeId, role, user } = useAuth();
@@ -203,6 +204,14 @@ export default function Fees() {
                 toast({ 
                   title: `Payment successful for ${studentName}`, 
                   className: "border-green-600 bg-green-50 text-green-900 shadow-lg animate-in slide-in-from-bottom border-2 font-medium" 
+                });
+
+                // Post global notification
+                addNotification({
+                  title: "Fee Payment Received",
+                  message: `Tuition payment of ₹${due.toLocaleString()} received for ${studentName}.`,
+                  type: "success",
+                  targetRole: "all",
                 });
               });
             }}>Payment Completed</Button>

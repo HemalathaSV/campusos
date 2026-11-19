@@ -1,7 +1,7 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { Users, CalendarCheck, FileText, Bell } from "lucide-react";
+import { Users, CalendarCheck, FileText, Bell, Award, Calendar } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
@@ -32,7 +32,7 @@ export default function FacultyDashboard() {
         </Card>
 
         {/* Action Widgets */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="border-border/50 hover:shadow-md transition-shadow">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-lg font-display">
@@ -40,7 +40,7 @@ export default function FacultyDashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">View and manage your assigned students.</p>
+              <p className="text-sm text-muted-foreground mb-4">View and manage assigned student rosters.</p>
               <Button asChild variant="outline" className="w-full">
                 <Link to="/students">View Students</Link>
               </Button>
@@ -54,7 +54,7 @@ export default function FacultyDashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">Mark daily attendance for your classes.</p>
+              <p className="text-sm text-muted-foreground mb-4">Record and verify daily classroom roll call.</p>
               <Button asChild className="w-full gradient-primary border-0">
                 <Link to="/attendance">Mark Attendance</Link>
               </Button>
@@ -64,13 +64,27 @@ export default function FacultyDashboard() {
           <Card className="border-border/50 hover:shadow-md transition-shadow">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-lg font-display">
-                <FileText className="h-5 w-5 text-warning" /> Reports
+                <Award className="h-5 w-5 text-warning" /> Examinations
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">Generate class and performance reports.</p>
+              <p className="text-sm text-muted-foreground mb-4">Evaluate internal marks and publish grades.</p>
               <Button asChild variant="outline" className="w-full">
-                <Link to="/reports">View Reports</Link>
+                <Link to="/examinations">Grade Evaluation</Link>
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/50 hover:shadow-md transition-shadow">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-lg font-display">
+                <Calendar className="h-5 w-5 text-purple-600 dark:text-purple-400" /> Timetable
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">Check weekly lecture hours and lab venues.</p>
+              <Button asChild variant="outline" className="w-full">
+                <Link to="/timetable">View Timetable</Link>
               </Button>
             </CardContent>
           </Card>

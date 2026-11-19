@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, GraduationCap, IndianRupee, CalendarCheck,
-  FileText, Brain, Workflow, Settings, LogOut, ChevronDown
+  FileText, Brain, Workflow, Settings, LogOut, ChevronDown, Award, Calendar
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -20,6 +20,8 @@ const adminNav = [
   { title: "Students", url: "/students", icon: Users },
   { title: "Fees", url: "/fees", icon: IndianRupee },
   { title: "Attendance", url: "/attendance", icon: CalendarCheck },
+  { title: "Examinations", url: "/examinations", icon: Award },
+  { title: "Timetable", url: "/timetable", icon: Calendar },
   { title: "Reports", url: "/reports", icon: FileText },
   { title: "AI Insights", url: "/ai-insights", icon: Brain },
   { title: "Automation", url: "/automation", icon: Workflow },
@@ -29,6 +31,8 @@ const facultyNav = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Students", url: "/students", icon: Users },
   { title: "Attendance", url: "/attendance", icon: CalendarCheck },
+  { title: "Examinations", url: "/examinations", icon: Award },
+  { title: "Timetable", url: "/timetable", icon: Calendar },
   { title: "Reports", url: "/reports", icon: FileText },
 ];
 
@@ -48,6 +52,8 @@ export function AppSidebar() {
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "My Profile", url: `/students/${(user as any)?.uid || "student-1"}`, icon: Users },
     { title: "Fees", url: "/fees", icon: IndianRupee },
+    { title: "Examinations", url: "/examinations", icon: Award },
+    { title: "Timetable", url: "/timetable", icon: Calendar },
   ];
 
   const navItems = role === "admin" ? adminNav : role === "faculty" ? facultyNav : studentNav;

@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Select as CustomSelect, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAllStudents, branches, Student } from "@/data/seedData";
-import { Search, Filter, Eye } from "lucide-react";
+import { Search, Filter, Eye, Download } from "lucide-react";
+import { exportToCsv } from "@/utils/exportCsv";
+import { toast } from "@/hooks/use-toast";
 
 export default function Students() {
   const navigate = useNavigate();
@@ -36,6 +38,31 @@ export default function Students() {
   const paginated = filtered.slice((page - 1) * perPage, page * perPage);
   const totalPages = Math.ceil(filtered.length / perPage);
 
+  const handleExportCsv = () => {
+    if (filtered.length === 0) {
+      toast({ title: "No data to export", description: "Filter criteria matched 0 students.", variant: "destructive" });
+      return;
+    }
+    exportToCsv(
+      `students_export_${new Date().toISOString().split("T")[0]}`,
+      filtered,
+      [
+        { header: "USN", accessor: s => s.usn },
+        { header: "Name", accessor: s => s.name },
+        { header: "Email", accessor: s => s.email },
+        { header: "Phone", accessor: s => s.phone },
+        { header: "Branch", accessor: s => typeof s.branch === 'object' ? s.branch.name : s.branch },
+        { header: "Year", accessor: s => s.year },
+        { header: "Fee Status", accessor: s => s.feeStatus },
+        { header: "Paid Amount (INR)", accessor: s => s.paidAmount },
+        { header: "Total Fee (INR)", accessor: s => s.totalFee },
+        { header: "Attendance (%)", accessor: s => `${s.attendancePercentage}%` },
+        { header: "Admission Date", accessor: s => s.admissionDate },
+      ]
+    );
+    toast({ title: "Export Successful", description: `Exported ${filtered.length} students to CSV.` });
+  };
+
   const feeStatusBadge = (status: string) => {
     if (status === "full") return <Badge className="bg-success/10 text-success border-0">Full</Badge>;
     if (status === "half") return <Badge className="bg-warning/10 text-warning border-0">Half</Badge>;
@@ -50,6 +77,9 @@ export default function Students() {
             <h1 className="font-display text-2xl font-bold">Students</h1>
             <p className="text-muted-foreground text-sm">{filtered.length} students found</p>
           </div>
+          <Button variant="outline" onClick={handleExportCsv} className="gap-2 shrink-0">
+            <Download className="h-4 w-4" /> Export CSV
+          </Button>
         </div>
 
         {/* Filters */}

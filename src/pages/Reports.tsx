@@ -9,6 +9,8 @@ import { getAllStudents, branches } from "@/data/seedData";
 import { useAuth } from "@/contexts/AuthContext";
 import { FileText, Download, Printer } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { exportToCsv } from "@/utils/exportCsv";
+import { toast } from "@/hooks/use-toast";
 
 type ReportType = "student" | "fee" | "attendance";
 
@@ -38,6 +40,77 @@ export default function Reports() {
     };
   });
 
+  const handleExportCsv = () => {
+    const today = new Date().toISOString().split("T")[0];
+    if (reportType === "student") {
+      exportToCsv(
+        `student_report_${today}`,
+        filtered,
+        [
+          { header: "USN", accessor: s => s.usn },
+          { header: "Name", accessor: s => s.name },
+          { header: "Branch", accessor: s => s.branch.name },
+          { header: "Year", accessor: s => s.year },
+          { header: "Fee Status", accessor: s => s.feeStatus },
+          { header: "Paid Amount (INR)", accessor: s => s.paidAmount },
+          { header: "Total Fee (INR)", accessor: s => s.totalFee },
+          { header: "Attendance (%)", accessor: s => `${s.attendancePercentage}%` },
+        ]
+      );
+      toast({ title: "Report Exported", description: `Exported ${filtered.length} student records.` });
+    } else if (reportType === "fee") {
+      exportToCsv(
+        `fee_summary_report_${today}`,
+        branches.map(b => {
+          const bs = allStudents.filter(s => s.branch.id === b.id);
+          const collected = bs.reduce((sum, s) => sum + s.paidAmount, 0);
+          const total = bs.reduce((sum, s) => sum + s.totalFee, 0);
+          return {
+            branchCode: b.code,
+            branchName: b.name,
+            totalStudents: bs.length,
+            collected,
+            pending: total - collected,
+            collectionRate: total > 0 ? `${Math.round((collected / total) * 100)}%` : "0%"
+          };
+        }),
+        [
+          { header: "Branch Code", accessor: r => r.branchCode },
+          { header: "Branch Name", accessor: r => r.branchName },
+          { header: "Enrolled Students", accessor: r => r.totalStudents },
+          { header: "Fees Collected (INR)", accessor: r => r.collected },
+          { header: "Fees Pending (INR)", accessor: r => r.pending },
+          { header: "Collection Rate", accessor: r => r.collectionRate },
+        ]
+      );
+      toast({ title: "Report Exported", description: "Exported branch-wise fee summary." });
+    } else {
+      exportToCsv(
+        `attendance_report_${today}`,
+        branches.map(b => {
+          const bs = allStudents.filter(s => s.branch.id === b.id);
+          const avg = bs.length === 0 ? 0 : Math.round(bs.reduce((sum, s) => sum + s.attendancePercentage, 0) / bs.length);
+          const below75 = bs.filter(s => s.attendancePercentage < 75).length;
+          return {
+            branchCode: b.code,
+            branchName: b.name,
+            totalStudents: bs.length,
+            avgAttendance: `${avg}%`,
+            studentsBelow75: below75,
+          };
+        }),
+        [
+          { header: "Branch Code", accessor: r => r.branchCode },
+          { header: "Branch Name", accessor: r => r.branchName },
+          { header: "Total Students", accessor: r => r.totalStudents },
+          { header: "Average Attendance", accessor: r => r.avgAttendance },
+          { header: "Students Below 75%", accessor: r => r.studentsBelow75 },
+        ]
+      );
+      toast({ title: "Report Exported", description: "Exported attendance report." });
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6 animate-fade-in">
@@ -46,9 +119,14 @@ export default function Reports() {
             <h1 className="font-display text-2xl font-bold">Reports</h1>
             <p className="text-muted-foreground text-sm">Generate and export detailed reports</p>
           </div>
-          <Button variant="outline" onClick={() => window.print()}>
-            <Printer className="h-4 w-4 mr-2" /> Print / Export PDF
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleExportCsv}>
+              <Download className="h-4 w-4 mr-2" /> Export CSV
+            </Button>
+            <Button variant="outline" onClick={() => window.print()}>
+              <Printer className="h-4 w-4 mr-2" /> Print / Export PDF
+            </Button>
+          </div>
         </div>
 
         {/* Report Type Selector */}

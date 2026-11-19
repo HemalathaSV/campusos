@@ -10,6 +10,7 @@ import { branches, recordDailyAttendance, dailyLedger, getAllStudents } from "@/
 import { CalendarCheck, Save, CheckCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { addNotification } from "@/services/notifications";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 export default function Attendance() {
@@ -61,6 +62,15 @@ export default function Attendance() {
     setSaved(true);
     const presentCount = Object.values(attendance).filter(Boolean).length;
     toast({ title: "Attendance Saved", description: `${presentCount}/${filtered.length} students marked present for ${date}` });
+
+    const branchObj = branches.find(b => b.id === branchFilter);
+    const branchName = branchObj ? branchObj.name : "Engineering";
+    addNotification({
+      title: "Attendance Ledger Updated",
+      message: `${presentCount}/${filtered.length} students present for ${branchName} (Year ${yearFilter}) on ${date}.`,
+      type: "success",
+      targetRole: "admin",
+    });
   };
 
   const presentCount = Object.values(attendance).filter(Boolean).length;

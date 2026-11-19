@@ -23,6 +23,8 @@ import Automation from "./pages/Automation";
 import NotFound from "./pages/NotFound";
 import StudentProfile from "./pages/StudentProfile";
 import Profile from "./pages/Profile";
+import Examinations from "./pages/Examinations";
+import Timetable from "./pages/Timetable";
 
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
@@ -58,6 +60,8 @@ const App = () => (
             <Route element={<ProtectedRoute allowedRoles={["admin", "faculty", "student"]} />}>
               <Route path="/students/:id" element={<StudentProfile />} />
               <Route path="/fees" element={<Fees />} />
+              <Route path="/examinations" element={<Examinations />} />
+              <Route path="/timetable" element={<Timetable />} />
             </Route>
 
             <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>

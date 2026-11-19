@@ -1,4 +1,4 @@
-import { Bell, Search, Menu } from "lucide-react";
+import { Bell, Search, Check, Trash2, CalendarCheck, FileText, IndianRupee, GraduationCap, AlertTriangle, Info, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -7,9 +7,18 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import {
+  getNotifications,
+  markAsRead,
+  markAllAsRead,
+  clearNotifications,
+  subscribeToNotifications,
+  formatTimeAgo,
+  NotificationItem
+} from "@/services/notifications";
 
 const routeNames: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -17,23 +26,29 @@ const routeNames: Record<string, string> = {
   "/students": "Students",
   "/fees": "Fees",
   "/attendance": "Attendance",
+  "/examinations": "Examinations",
+  "/timetable": "Timetable",
   "/reports": "Reports",
   "/ai-insights": "AI Insights",
   "/automation": "Automation",
+  "/profile": "My Profile",
 };
-
-const mockNotifications = [
-  { id: 1, text: "15 students have attendance below 75%", time: "2 min ago", type: "warning" as const },
-  { id: 2, text: "Fee payment received from Aarav Sharma", time: "10 min ago", type: "success" as const },
-  { id: 3, text: "New admission application received", time: "1 hr ago", type: "info" as const },
-  { id: 4, text: "23 students have pending fees", time: "3 hr ago", type: "warning" as const },
-];
 
 export function Topbar() {
   const { role, user, collegeName } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => getNotifications(role));
+
+  useEffect(() => {
+    const sync = () => setNotifications(getNotifications(role));
+    sync();
+    const unsubscribe = subscribeToNotifications(sync);
+    return () => unsubscribe();
+  }, [role]);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && searchQuery.trim()) {
@@ -42,12 +57,27 @@ export function Topbar() {
       else if (q.includes("fee") || q.includes("pay") || q.includes("receipt")) navigate("/fees");
       else if (q.includes("admin") || q.includes("apply") || q.includes("application")) navigate("/admissions");
       else if (q.includes("attend")) navigate("/attendance");
+      else if (q.includes("exam") || q.includes("grade") || q.includes("mark") || q.includes("sgpa") || q.includes("cgpa")) navigate("/examinations");
+      else if (q.includes("time") || q.includes("sched") || q.includes("class")) navigate("/timetable");
       else if (q.includes("report")) navigate("/reports");
       else if (q.includes("dash")) navigate("/dashboard");
       else {
         toast({ title: "Search", description: `Searching for: "${searchQuery}"...`, variant: "default" });
       }
       setSearchQuery("");
+    }
+  };
+
+  const getNotificationIcon = (type: NotificationItem["type"]) => {
+    switch (type) {
+      case "success":
+        return <CheckCircle2 className="h-4 w-4 text-success shrink-0" />;
+      case "warning":
+        return <AlertTriangle className="h-4 w-4 text-warning shrink-0" />;
+      case "destructive":
+        return <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />;
+      default:
+        return <Info className="h-4 w-4 text-primary shrink-0" />;
     }
   };
 
@@ -70,7 +100,7 @@ export function Topbar() {
       <div className="hidden md:flex items-center relative max-w-xs">
         <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Search students, fees..."
+          placeholder="Search students, exams, fees..."
           className="pl-9 h-9 bg-muted/50 border-transparent focus:border-primary/30 w-64"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -83,24 +113,81 @@ export function Topbar() {
         {role}
       </Badge>
 
-      {/* Notifications */}
+      {/* Dynamic Notifications Dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" className="relative h-9 w-9">
             <Bell className="h-4 w-4" />
-            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground animate-in zoom-in">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-80">
-          <div className="p-2 border-b border-border">
-            <p className="font-semibold text-sm">Notifications</p>
+        <DropdownMenuContent align="end" className="w-88 sm:w-96 p-0 shadow-lg border-border/80">
+          <div className="p-3 border-b border-border flex items-center justify-between bg-muted/30">
+            <div>
+              <p className="font-semibold text-sm">Notifications</p>
+              <p className="text-xs text-muted-foreground">{unreadCount} unread update{unreadCount === 1 ? '' : 's'}</p>
+            </div>
+            <div className="flex items-center gap-1">
+              {unreadCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1 px-2"
+                  onClick={() => markAllAsRead(role)}
+                >
+                  <Check className="h-3 w-3" /> Mark Read
+                </Button>
+              )}
+              {notifications.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground hover:text-destructive gap-1 px-2"
+                  onClick={() => clearNotifications(role)}
+                >
+                  <Trash2 className="h-3 w-3" /> Clear
+                </Button>
+              )}
+            </div>
           </div>
-          {mockNotifications.map(n => (
-            <DropdownMenuItem key={n.id} className="flex flex-col items-start gap-1 py-3">
-              <span className="text-sm">{n.text}</span>
-              <span className="text-xs text-muted-foreground">{n.time}</span>
-            </DropdownMenuItem>
-          ))}
+          <div className="max-h-[360px] overflow-y-auto divide-y divide-border/40">
+            {notifications.length === 0 ? (
+              <div className="p-6 text-center text-sm text-muted-foreground">
+                <Bell className="h-6 w-6 mx-auto mb-2 opacity-30" />
+                No new notifications
+              </div>
+            ) : (
+              notifications.map((n) => (
+                <div
+                  key={n.id}
+                  onClick={() => markAsRead(n.id)}
+                  className={`p-3 text-left transition-colors cursor-pointer hover:bg-muted/50 flex items-start gap-3 ${
+                    !n.read ? "bg-primary/5 font-medium" : "opacity-80"
+                  }`}
+                >
+                  <div className="mt-0.5">{getNotificationIcon(n.type)}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold truncate text-foreground">{n.title}</p>
+                      <span className="text-[11px] text-muted-foreground shrink-0 font-normal">
+                        {formatTimeAgo(n.timestamp)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5 font-normal">
+                      {n.message}
+                    </p>
+                  </div>
+                  {!n.read && (
+                    <span className="h-2 w-2 rounded-full bg-primary shrink-0 mt-1.5" />
+                  )}
+                </div>
+              ))
+            )}
+          </div>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -119,7 +206,13 @@ export function Topbar() {
           <DropdownMenuItem className="cursor-pointer" onClick={() => navigate("/profile")}>
             View Profile
           </DropdownMenuItem>
-          <DropdownMenuItem>Settings</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate("/examinations")}>
+            Academic Records
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate("/timetable")}>
+            Class Timetable
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer" onClick={() => (window as any).location.href = "/login"}>
             Sign Out
           </DropdownMenuItem>

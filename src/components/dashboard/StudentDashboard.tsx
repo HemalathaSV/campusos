@@ -4,7 +4,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAllStudents } from "@/data/seedData";
-import { GraduationCap, IndianRupee, CalendarCheck, Bell, User } from "lucide-react";
+import { GraduationCap, IndianRupee, CalendarCheck, Bell, User, Award, Calendar } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
@@ -42,9 +42,15 @@ export default function StudentDashboard() {
                   <span className="hidden sm:inline">•</span> 
                   <Badge variant="outline">{(user as any)?.branch || "Computer Science"}</Badge>
                 </div>
-                <div className="flex gap-3 justify-center sm:justify-start pt-2">
+                <div className="flex flex-wrap gap-2 justify-center sm:justify-start pt-2">
                   <Button variant="outline" size="sm" asChild>
-                    <Link to={`/students/${(user as any)?.uid || "student-1"}`}><User className="h-4 w-4 mr-2" /> View Full Profile</Link>
+                    <Link to={`/students/${(user as any)?.uid || "student-1"}`}><User className="h-4 w-4 mr-1.5" /> View Full Profile</Link>
+                  </Button>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to="/examinations"><Award className="h-4 w-4 mr-1.5" /> Academic Grades</Link>
+                  </Button>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to="/timetable"><Calendar className="h-4 w-4 mr-1.5" /> Class Schedule</Link>
                   </Button>
                 </div>
               </div>
