@@ -451,7 +451,7 @@ export function approveSupplementaryExam(
     addNotification({
       title: `Supplementary Evaluated: ${target.courseCode}`,
       message: `${facultyName} evaluated your re-test for ${target.courseCode}. Score: ${total}/100 (Grade ${gradeLetter} - Fail). Backlog remains active.`,
-      type: "alert",
+      type: "destructive",
       targetRole: "student",
     });
   }

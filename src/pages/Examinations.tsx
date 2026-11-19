@@ -1107,17 +1107,6 @@ export default function Examinations({ defaultTab }: { defaultTab?: "evaluation"
                 )}
               </Button>
             </div>
-                variant="ghost"
-                className={`rounded-none border-b-2 px-4 py-2 text-sm font-semibold transition-all ${
-                  adminTab === "backlogs"
-                    ? "border-destructive text-destructive"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-                onClick={() => setAdminTab("backlogs")}
-              >
-                <AlertTriangle className="h-4 w-4 mr-2" /> Backlog & Arrears Tracker ({studentsWithBacklogs.length})
-              </Button>
-            </div>
 
             {adminTab === "evaluation" ? (
               <div className="space-y-6">
