@@ -272,7 +272,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const setDemoRole = (r: UserRole) => setRole(r);
+  const setDemoRole = (r: UserRole) => {
+    setRole(r);
+    const mockProfile = r === "student"
+      ? { id: "student-1", name: "Aarav Sharma", email: "aarav1@gmail.com" }
+      : r === "faculty"
+      ? { id: "faculty-1", name: "Dr. Ramesh Kumar", email: "ranjith.kc@gmail.com" }
+      : { id: "admin-1", name: "Principal Office", email: "admin@gmail.com" };
+
+    const mockObj = {
+      uid: mockProfile.id,
+      email: mockProfile.email,
+      role: r,
+      fullName: mockProfile.name,
+      initials: mockProfile.name.split(" ").map(n => n[0]).join(""),
+      college_name: collegeName,
+      college_id: collegeId,
+    };
+    localStorage.setItem('mockUser', JSON.stringify(mockObj));
+    setUser(mockObj as unknown as User);
+    setSession({ access_token: mockObj.uid });
+  };
 
   return (
     <AuthContext.Provider value={{ user, session, role, loading, collegeName, collegeId, signIn, signUp, signOut, setDemoRole }}>

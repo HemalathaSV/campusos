@@ -41,7 +41,7 @@ const routeNames: Record<string, string> = {
 };
 
 export function Topbar() {
-  const { role, user, collegeName } = useAuth();
+  const { role, user, collegeName, setDemoRole } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
@@ -119,10 +119,29 @@ export function Topbar() {
         />
       </div>
 
-      {/* Role badge */}
-      <Badge variant="secondary" className="capitalize text-xs hidden sm:flex">
-        {role}
-      </Badge>
+      {/* 1-Click Role Switcher */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="h-8 text-xs capitalize gap-1.5 font-medium border-border/80">
+            <span className="h-2 w-2 rounded-full bg-success animate-pulse"></span>
+            Role: {role}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="text-xs w-48">
+          <div className="px-2 py-1.5 font-semibold text-[11px] text-muted-foreground border-b border-border/50">
+            Switch Demo Role
+          </div>
+          <DropdownMenuItem onClick={() => setDemoRole("student")} className="cursor-pointer">
+            Student (Aarav Sharma)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setDemoRole("faculty")} className="cursor-pointer">
+            Faculty (Dr. Ramesh)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setDemoRole("admin")} className="cursor-pointer">
+            Admin (Dean Office)
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {/* Theme Toggle */}
       <ThemeToggle />
