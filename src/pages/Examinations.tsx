@@ -6,9 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAllStudents, branches } from "@/data/seedData";
-import { branchCourses, calculateGrade, generateStudentAcademicRecord, SubjectCourse } from "@/data/examinationData";
+import {
+  branchCourses,
+  calculateGrade,
+  generateStudentAcademicRecord,
+  registerSupplementaryExam,
+  getSupplementaryRegistrations,
+  SupplementaryRegistration,
+  SubjectCourse
+} from "@/data/examinationData";
 import { exportToCsv } from "@/utils/exportCsv";
 import { addNotification } from "@/services/notifications";
 import { toast } from "@/hooks/use-toast";
@@ -22,7 +31,11 @@ import {
   CheckCircle2,
   FileCheck,
   AlertCircle,
-  Printer
+  AlertTriangle,
+  Printer,
+  RotateCcw,
+  Clock,
+  ShieldCheck
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -51,6 +64,72 @@ export default function Examinations() {
 
   // Student selected semester tab
   const [selectedSemester, setSelectedSemester] = useState<number>(studentAcademicRecord.semesters.length || 1);
+
+  // Supplementary registrations state
+  const [supplementaryList, setSupplementaryList] = useState<SupplementaryRegistration[]>(() =>
+    getSupplementaryRegistrations(currentStudent?.id)
+  );
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [selectedBacklogForRegistration, setSelectedBacklogForRegistration] = useState<any | null>(null);
+
+  // Admin / Faculty active tab
+  const [adminTab, setAdminTab] = useState<"evaluation" | "backlogs">("evaluation");
+
+  // Reload supplementary list when student changes
+  useEffect(() => {
+    if (currentStudent?.id) {
+      setSupplementaryList(getSupplementaryRegistrations(currentStudent.id));
+    }
+  }, [currentStudent?.id]);
+
+  const handleRegisterSupplementary = (course: any) => {
+    if (!currentStudent?.id) return;
+    const reg = registerSupplementaryExam(currentStudent.id, course.courseCode, course.courseTitle);
+    setSupplementaryList(getSupplementaryRegistrations(currentStudent.id));
+    setIsRegisterModalOpen(false);
+
+    toast({
+      title: "Supplementary Registration Confirmed",
+      description: `Registered for ${course.courseCode}: ${course.courseTitle}. Exam fee ₹500 recorded.`,
+    });
+
+    addNotification({
+      title: "Supplementary Exam Registered",
+      message: `You registered for ${course.courseCode} supplementary examination. Admit card will be released 7 days before re-test.`,
+      type: "info",
+      targetRole: "student",
+    });
+  };
+
+  const handleSimulateClearBacklog = (courseCode: string) => {
+    if (!currentStudent?.id) return;
+    const key = `cleared_backlogs_${currentStudent.id}`;
+    const cleared: string[] = JSON.parse(localStorage.getItem(key) || "[]");
+    if (!cleared.includes(courseCode)) {
+      cleared.push(courseCode);
+      localStorage.setItem(key, JSON.stringify(cleared));
+    }
+    toast({
+      title: "Backlog Cleared in Retest",
+      description: `Supplementary examination for ${courseCode} passed successfully! Academic records updated.`,
+    });
+    // Force re-render
+    window.location.reload();
+  };
+
+  // College-wide students with backlogs for Faculty / Admin
+  const studentsWithBacklogs = useMemo(() => {
+    return allStudents
+      .map(st => {
+        const bId = typeof st.branch === "object" ? st.branch.id : "cs";
+        const record = generateStudentAcademicRecord(st.id, bId, st.year || 2);
+        return {
+          student: st,
+          record,
+        };
+      })
+      .filter(item => item.record.hasBacklogs);
+  }, [allStudents]);
 
   // Faculty / Admin Filter State
   const [facultyBranch, setFacultyBranch] = useState("cs");
@@ -254,15 +333,126 @@ export default function Examinations() {
                     <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider mb-1">
                       Academic Standing
                     </p>
-                    <p className="text-3xl font-display font-bold text-success">Good</p>
-                    <p className="text-xs text-muted-foreground mt-2">0 Backlogs • Eligible for Campus Placement</p>
+                    <p
+                      className={`text-3xl font-display font-bold ${
+                        studentAcademicRecord.activeBacklogsCount === 0 ? "text-success" : "text-destructive"
+                      }`}
+                    >
+                      {studentAcademicRecord.activeBacklogsCount === 0
+                        ? "Clear"
+                        : `${studentAcademicRecord.activeBacklogsCount} Backlog${
+                            studentAcademicRecord.activeBacklogsCount > 1 ? "s" : ""
+                          }`}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {studentAcademicRecord.activeBacklogsCount === 0
+                        ? "0 Backlogs • Eligible for Campus Placement"
+                        : "Requires supplementary exam clearance"}
+                    </p>
                   </div>
-                  <div className="h-12 w-12 rounded-xl bg-success/10 flex items-center justify-center text-success">
-                    <CheckCircle2 className="h-6 w-6" />
+                  <div
+                    className={`h-12 w-12 rounded-xl flex items-center justify-center ${
+                      studentAcademicRecord.activeBacklogsCount === 0
+                        ? "bg-success/10 text-success"
+                        : "bg-destructive/10 text-destructive"
+                    }`}
+                  >
+                    {studentAcademicRecord.activeBacklogsCount === 0 ? (
+                      <CheckCircle2 className="h-6 w-6" />
+                    ) : (
+                      <AlertTriangle className="h-6 w-6" />
+                    )}
                   </div>
                 </CardContent>
               </Card>
             </div>
+
+            {/* Backlog Alert & Supplementary Re-Exam Management */}
+            {studentAcademicRecord.activeBacklogsCount > 0 && (
+              <Card className="border-destructive/30 bg-destructive/5 shadow-sm">
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-destructive animate-pulse" />
+                      <CardTitle className="text-base font-semibold text-destructive">
+                        Active Backlog Courses ({studentAcademicRecord.activeBacklogsCount})
+                      </CardTitle>
+                    </div>
+                    <Badge variant="destructive" className="w-fit">
+                      Supplementary Registration Open
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs">
+                    The following course(s) were not cleared during regular semester evaluations. You may register for upcoming supplementary re-examinations below.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {studentAcademicRecord.backlogCourses.map(backlog => {
+                      const isRegistered = supplementaryList.some(r => r.courseCode === backlog.courseCode);
+                      return (
+                        <div
+                          key={backlog.courseCode}
+                          className="p-3.5 rounded-lg border border-border/80 bg-background/80 flex flex-col justify-between gap-3 shadow-xs"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-xs font-bold text-primary">{backlog.courseCode}</span>
+                              <Badge variant="outline" className="text-xs text-destructive border-destructive/40 bg-destructive/10">
+                                Grade F • Semester {backlog.semester}
+                              </Badge>
+                            </div>
+                            <h4 className="font-medium text-sm mt-1">{backlog.courseTitle}</h4>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Credits: {backlog.credits} • Internal: {backlog.internalMarks}/40 • External: {backlog.externalMarks}/60 (Total: {backlog.totalMarks}/100)
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+                            {isRegistered ? (
+                              <Badge className="bg-info/15 text-info border-0 text-xs py-1 px-2.5 gap-1.5">
+                                <Clock className="h-3.5 w-3.5" /> Supplementary Registered (₹500 Paid)
+                              </Badge>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="h-8 text-xs gap-1.5"
+                                onClick={() => {
+                                  setSelectedBacklogForRegistration(backlog);
+                                  setIsRegisterModalOpen(true);
+                                }}
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" /> Register for Re-Exam (₹500)
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 text-xs text-muted-foreground hover:text-foreground ml-auto"
+                              title="Simulate Clearing Course"
+                              onClick={() => handleSimulateClearBacklog(backlog.courseCode)}
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5 text-success mr-1" /> Clear in Retest
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {supplementaryList.length > 0 && (
+                    <div className="mt-3 p-3 rounded-lg bg-muted/40 border border-border text-xs flex items-center justify-between">
+                      <span className="text-muted-foreground">
+                        Registered for <strong>{supplementaryList.length}</strong> re-examination(s). Admit cards will be generated 7 days before examination dates.
+                      </span>
+                      <Badge variant="secondary" className="font-mono text-[11px]">
+                        Exam Fee Total: ₹{supplementaryList.length * 500}
+                      </Badge>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* SGPA Progress Chart */}
             <Card className="border-border/50">
@@ -410,200 +600,386 @@ export default function Examinations() {
           </div>
         ) : (
           /* =========================================================================
-             FACULTY & ADMIN VIEW: Grade Entry, Score Evaluation & Class Sheets
+             FACULTY & ADMIN VIEW: Grade Entry, Evaluation & Backlog Management
              ========================================================================= */
           <div className="space-y-6">
-            {/* Filter Controls Card */}
-            <Card className="border-border/50">
-              <CardContent className="p-4">
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase mb-1 block">
-                      Branch
-                    </label>
-                    <select
-                      value={facultyBranch}
-                      onChange={e => setFacultyBranch(e.target.value)}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-                    >
-                      {branches.map(b => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+            <div className="flex border-b border-border">
+              <Button
+                variant="ghost"
+                className={`rounded-none border-b-2 px-4 py-2 text-sm font-semibold transition-all ${
+                  adminTab === "evaluation"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setAdminTab("evaluation")}
+              >
+                <FileCheck className="h-4 w-4 mr-2" /> Grade Entry & Marksheets
+              </Button>
+              <Button
+                variant="ghost"
+                className={`rounded-none border-b-2 px-4 py-2 text-sm font-semibold transition-all ${
+                  adminTab === "backlogs"
+                    ? "border-destructive text-destructive"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setAdminTab("backlogs")}
+              >
+                <AlertTriangle className="h-4 w-4 mr-2" /> Backlog & Arrears Tracker ({studentsWithBacklogs.length})
+              </Button>
+            </div>
 
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase mb-1 block">
-                      Year
-                    </label>
-                    <select
-                      value={facultyYear}
-                      onChange={e => {
-                        setFacultyYear(e.target.value);
-                        setFacultySemester(String(parseInt(e.target.value) * 2 - 1));
-                      }}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-                    >
-                      {[1, 2, 3, 4].map(y => (
-                        <option key={y} value={String(y)}>
-                          Year {y}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+            {adminTab === "evaluation" ? (
+              <div className="space-y-6">
+                {/* Filter Controls Card */}
+                <Card className="border-border/50">
+                  <CardContent className="p-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase mb-1 block">
+                          Branch
+                        </label>
+                        <select
+                          value={facultyBranch}
+                          onChange={e => setFacultyBranch(e.target.value)}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                        >
+                          {branches.map(b => (
+                            <option key={b.id} value={b.id}>
+                              {b.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase mb-1 block">
-                      Semester
-                    </label>
-                    <select
-                      value={facultySemester}
-                      onChange={e => setFacultySemester(e.target.value)}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
-                    >
-                      {Array.from({ length: 8 }, (_, i) => i + 1).map(s => (
-                        <option key={s} value={String(s)}>
-                          Semester {s}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase mb-1 block">
+                          Year
+                        </label>
+                        <select
+                          value={facultyYear}
+                          onChange={e => {
+                            setFacultyYear(e.target.value);
+                            setFacultySemester(String(parseInt(e.target.value) * 2 - 1));
+                          }}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                        >
+                          {[1, 2, 3, 4].map(y => (
+                            <option key={y} value={String(y)}>
+                              Year {y}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase mb-1 block">
-                      Course Subject
-                    </label>
-                    <select
-                      value={facultyCourseCode}
-                      onChange={e => setFacultyCourseCode(e.target.value)}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none font-medium"
-                    >
-                      {availableCourses.map(c => (
-                        <option key={c.code} value={c.code}>
-                          {c.code} - {c.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase mb-1 block">
+                          Semester
+                        </label>
+                        <select
+                          value={facultySemester}
+                          onChange={e => setFacultySemester(e.target.value)}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none"
+                        >
+                          {Array.from({ length: 8 }, (_, i) => i + 1).map(s => (
+                            <option key={s} value={String(s)}>
+                              Semester {s}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-            {/* Roster Evaluation Table */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-3 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="font-display text-lg flex items-center gap-2">
-                    <FileCheck className="h-5 w-5 text-primary" /> Evaluation Sheet: {facultyCourseCode}
-                  </CardTitle>
-                  <CardDescription>
-                    {availableCourses.find(c => c.code === facultyCourseCode)?.title || "Selected Course"} •{" "}
-                    {rosterStudents.length} Students Enrolled
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={handleExportMarks} className="gap-2">
-                    <Download className="h-4 w-4" /> Export CSV
-                  </Button>
-                  <Button size="sm" onClick={handleSaveMarks} className="gradient-primary border-0 gap-2 font-medium">
-                    <Save className="h-4 w-4" /> Save Grades
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>USN</TableHead>
-                      <TableHead>Student Name</TableHead>
-                      <TableHead className="text-center">Attendance</TableHead>
-                      <TableHead className="text-center w-32">Internal (Max 40)</TableHead>
-                      <TableHead className="text-center w-32">External (Max 60)</TableHead>
-                      <TableHead className="text-center">Total (100)</TableHead>
-                      <TableHead className="text-center">Grade</TableHead>
-                      <TableHead className="text-center">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rosterStudents.slice(0, 30).map(student => {
-                      const m = marksState[student.id] || { internal: 30, external: 45 };
-                      const total = m.internal + m.external;
-                      const { gradeLetter, status } = calculateGrade(total);
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase mb-1 block">
+                          Course Subject
+                        </label>
+                        <select
+                          value={facultyCourseCode}
+                          onChange={e => setFacultyCourseCode(e.target.value)}
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:outline-none font-medium"
+                        >
+                          {availableCourses.map(c => (
+                            <option key={c.code} value={c.code}>
+                              {c.code} - {c.title}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
-                      return (
-                        <TableRow key={student.id}>
-                          <TableCell className="font-mono text-xs font-semibold">{student.usn}</TableCell>
-                          <TableCell className="font-medium text-sm">{student.name}</TableCell>
-                          <TableCell className="text-center">
-                            <Badge
-                              variant={student.attendancePercentage >= 75 ? "secondary" : "destructive"}
-                              className="text-xs"
-                            >
-                              {student.attendancePercentage}%
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Input
-                              type="number"
-                              min={0}
-                              max={40}
-                              value={m.internal}
-                              onChange={e => handleScoreChange(student.id, "internal", e.target.value)}
-                              className="h-8 w-24 mx-auto text-center font-mono font-bold"
-                            />
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Input
-                              type="number"
-                              min={0}
-                              max={60}
-                              value={m.external}
-                              onChange={e => handleScoreChange(student.id, "external", e.target.value)}
-                              className="h-8 w-24 mx-auto text-center font-mono font-bold"
-                            />
-                          </TableCell>
-                          <TableCell className="text-center font-mono font-bold text-base">{total}</TableCell>
-                          <TableCell className="text-center">
-                            <Badge
-                              className={`border-0 font-bold ${
-                                gradeLetter === "O" || gradeLetter === "A+"
-                                  ? "bg-success/15 text-success"
-                                  : gradeLetter === "A" || gradeLetter === "B+"
-                                  ? "bg-primary/15 text-primary"
-                                  : "bg-warning/15 text-warning"
-                              }`}
-                            >
-                              {gradeLetter}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Badge
-                              variant="outline"
-                              className={
-                                status === "Pass"
-                                  ? "text-success border-success/30 bg-success/5"
-                                  : "text-destructive border-destructive/30 bg-destructive/5"
-                              }
-                            >
-                              {status}
-                            </Badge>
-                          </TableCell>
+                {/* Roster Evaluation Table */}
+                <Card className="border-border/50">
+                  <CardHeader className="pb-3 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <CardTitle className="font-display text-lg flex items-center gap-2">
+                        <FileCheck className="h-5 w-5 text-primary" /> Evaluation Sheet: {facultyCourseCode}
+                      </CardTitle>
+                      <CardDescription>
+                        {availableCourses.find(c => c.code === facultyCourseCode)?.title || "Selected Course"} •{" "}
+                        {rosterStudents.length} Students Enrolled
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={handleExportMarks} className="gap-2">
+                        <Download className="h-4 w-4" /> Export CSV
+                      </Button>
+                      <Button size="sm" onClick={handleSaveMarks} className="gradient-primary border-0 gap-2 font-medium">
+                        <Save className="h-4 w-4" /> Save Grades
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>USN</TableHead>
+                          <TableHead>Student Name</TableHead>
+                          <TableHead className="text-center">Attendance</TableHead>
+                          <TableHead className="text-center w-32">Internal (Max 40)</TableHead>
+                          <TableHead className="text-center w-32">External (Max 60)</TableHead>
+                          <TableHead className="text-center">Total (100)</TableHead>
+                          <TableHead className="text-center">Grade</TableHead>
+                          <TableHead className="text-center">Status</TableHead>
                         </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-                {rosterStudents.length > 30 && (
-                  <div className="p-3 text-center text-xs text-muted-foreground border-t border-border">
-                    Showing top 30 of {rosterStudents.length} students. Export CSV for the full department evaluation sheet.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                      </TableHeader>
+                      <TableBody>
+                        {rosterStudents.slice(0, 30).map(student => {
+                          const m = marksState[student.id] || { internal: 30, external: 45 };
+                          const total = m.internal + m.external;
+                          const { gradeLetter, status } = calculateGrade(total);
+
+                          return (
+                            <TableRow key={student.id}>
+                              <TableCell className="font-mono text-xs font-semibold">{student.usn}</TableCell>
+                              <TableCell className="font-medium text-sm">{student.name}</TableCell>
+                              <TableCell className="text-center">
+                                <Badge
+                                  variant={student.attendancePercentage >= 75 ? "secondary" : "destructive"}
+                                  className="text-xs"
+                                >
+                                  {student.attendancePercentage}%
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={40}
+                                  value={m.internal}
+                                  onChange={e => handleScoreChange(student.id, "internal", e.target.value)}
+                                  className="h-8 w-24 mx-auto text-center font-mono font-bold"
+                                />
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={60}
+                                  value={m.external}
+                                  onChange={e => handleScoreChange(student.id, "external", e.target.value)}
+                                  className="h-8 w-24 mx-auto text-center font-mono font-bold"
+                                />
+                              </TableCell>
+                              <TableCell className="text-center font-mono font-bold text-base">{total}</TableCell>
+                              <TableCell className="text-center">
+                                <Badge
+                                  className={`border-0 font-bold ${
+                                    gradeLetter === "O" || gradeLetter === "A+"
+                                      ? "bg-success/15 text-success"
+                                      : gradeLetter === "A" || gradeLetter === "B+"
+                                      ? "bg-primary/15 text-primary"
+                                      : "bg-warning/15 text-warning"
+                                  }`}
+                                >
+                                  {gradeLetter}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    status === "Pass"
+                                      ? "text-success border-success/30 bg-success/5"
+                                      : "text-destructive border-destructive/30 bg-destructive/5"
+                                  }
+                                >
+                                  {status}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                    {rosterStudents.length > 30 && (
+                      <div className="p-3 text-center text-xs text-muted-foreground border-t border-border">
+                        Showing top 30 of {rosterStudents.length} students. Export CSV for the full department evaluation sheet.
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              /* Backlog / Arrears Register View */
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Card className="border-border/50">
+                    <CardContent className="p-4">
+                      <p className="text-xs uppercase font-semibold text-muted-foreground">Total Cohort Students</p>
+                      <p className="text-2xl font-bold font-display mt-1">{allStudents.length}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Across all branches & years</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-destructive/30 bg-destructive/5">
+                    <CardContent className="p-4">
+                      <p className="text-xs uppercase font-semibold text-destructive">Students with Active Backlogs</p>
+                      <p className="text-2xl font-bold font-display text-destructive mt-1">
+                        {studentsWithBacklogs.length}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {((studentsWithBacklogs.length / (allStudents.length || 1)) * 100).toFixed(1)}% of total cohort
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-border/50">
+                    <CardContent className="p-4">
+                      <p className="text-xs uppercase font-semibold text-muted-foreground">Supplementary Registrations</p>
+                      <p className="text-2xl font-bold font-display text-primary mt-1">
+                        {getSupplementaryRegistrations().length}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">Pending re-exam processing</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card className="border-border/50">
+                  <CardHeader className="pb-3 border-b border-border/50">
+                    <CardTitle className="font-display text-lg flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-destructive" /> Active Arrears Roster
+                    </CardTitle>
+                    <CardDescription>
+                      Students requiring remedial classes or supplementary examination re-evaluation
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>USN</TableHead>
+                          <TableHead>Student Name</TableHead>
+                          <TableHead>Branch</TableHead>
+                          <TableHead className="text-center">Year</TableHead>
+                          <TableHead className="text-center">Backlogs Count</TableHead>
+                          <TableHead>Backlog Subject Codes</TableHead>
+                          <TableHead className="text-center">CGPA</TableHead>
+                          <TableHead className="text-center">Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {studentsWithBacklogs.map(({ student, record }) => (
+                          <TableRow key={student.id}>
+                            <TableCell className="font-mono text-xs font-semibold">{student.usn}</TableCell>
+                            <TableCell className="font-medium text-sm">{student.name}</TableCell>
+                            <TableCell className="text-xs uppercase">
+                              {typeof student.branch === "object" ? student.branch.name : student.branch}
+                            </TableCell>
+                            <TableCell className="text-center font-mono">Year {student.year}</TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="destructive" className="font-bold text-xs">
+                                {record.activeBacklogsCount}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap gap-1">
+                                {record.backlogCourses.map(b => (
+                                  <Badge key={b.courseCode} variant="outline" className="text-[11px] font-mono border-destructive/40 text-destructive">
+                                    {b.courseCode} (Sem {b.semester})
+                                  </Badge>
+                                ))}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center font-mono font-bold text-primary">
+                              {record.cgpa}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs"
+                                onClick={() => {
+                                  toast({
+                                    title: "Remedial Notice Dispatched",
+                                    description: `Notification and counselor alert sent to ${student.name} (${student.usn}).`,
+                                  });
+                                }}
+                              >
+                                Send Notice
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </div>
         )}
+
+        {/* Supplementary Exam Registration Confirmation Modal */}
+        <Dialog open={isRegisterModalOpen} onOpenChange={setIsRegisterModalOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <RotateCcw className="h-5 w-5 text-primary" /> Confirm Supplementary Exam Registration
+              </DialogTitle>
+              <DialogDescription>
+                Review details for re-examination registration. Exam fee will be billed to your semester ledger.
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedBacklogForRegistration && (
+              <div className="space-y-3 py-2 text-sm">
+                <div className="p-3 rounded-lg bg-muted/50 border border-border space-y-1.5">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground text-xs">Course Code:</span>
+                    <span className="font-mono font-bold text-primary">{selectedBacklogForRegistration.courseCode}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground text-xs">Subject Title:</span>
+                    <span className="font-medium text-right">{selectedBacklogForRegistration.courseTitle}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground text-xs">Original Semester:</span>
+                    <span>Semester {selectedBacklogForRegistration.semester}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-border pt-1.5 mt-1.5">
+                    <span className="font-semibold text-xs">Re-Exam Fee:</span>
+                    <span className="font-bold text-success font-mono">₹500.00</span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  By clicking confirm, an admit card requisition will be initiated. The examination timetable and hall ticket will appear under your Examinations dashboard.
+                </p>
+              </div>
+            )}
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="outline" onClick={() => setIsRegisterModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                className="gradient-primary border-0"
+                onClick={() => selectedBacklogForRegistration && handleRegisterSupplementary(selectedBacklogForRegistration)}
+              >
+                Confirm & Pay ₹500
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

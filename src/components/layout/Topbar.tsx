@@ -19,6 +19,7 @@ import {
   formatTimeAgo,
   NotificationItem
 } from "@/services/notifications";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const routeNames: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -26,8 +27,13 @@ const routeNames: Record<string, string> = {
   "/students": "Students",
   "/fees": "Fees",
   "/attendance": "Attendance",
-  "/examinations": "Examinations",
-  "/timetable": "Timetable",
+  "/examinations": "Examinations & Grading",
+  "/timetable": "Timetable & Classes",
+  "/placements": "Campus Placements",
+  "/leaves": "Leaves & Absence",
+  "/library": "Digital Library",
+  "/hostel": "Hostel & Helpdesk",
+  "/parent-portal": "Parent Portal",
   "/reports": "Reports",
   "/ai-insights": "AI Insights",
   "/automation": "Automation",
@@ -57,8 +63,13 @@ export function Topbar() {
       else if (q.includes("fee") || q.includes("pay") || q.includes("receipt")) navigate("/fees");
       else if (q.includes("admin") || q.includes("apply") || q.includes("application")) navigate("/admissions");
       else if (q.includes("attend")) navigate("/attendance");
-      else if (q.includes("exam") || q.includes("grade") || q.includes("mark") || q.includes("sgpa") || q.includes("cgpa")) navigate("/examinations");
+      else if (q.includes("exam") || q.includes("grade") || q.includes("mark") || q.includes("sgpa") || q.includes("cgpa") || q.includes("backlog")) navigate("/examinations");
       else if (q.includes("time") || q.includes("sched") || q.includes("class")) navigate("/timetable");
+      else if (q.includes("place") || q.includes("job") || q.includes("drive") || q.includes("career")) navigate("/placements");
+      else if (q.includes("leave") || q.includes("absent") || q.includes("od")) navigate("/leaves");
+      else if (q.includes("lib") || q.includes("book")) navigate("/library");
+      else if (q.includes("hostel") || q.includes("room") || q.includes("bed") || q.includes("helpdesk")) navigate("/hostel");
+      else if (q.includes("parent") || q.includes("guard")) navigate("/parent-portal");
       else if (q.includes("report")) navigate("/reports");
       else if (q.includes("dash")) navigate("/dashboard");
       else {
@@ -112,6 +123,9 @@ export function Topbar() {
       <Badge variant="secondary" className="capitalize text-xs hidden sm:flex">
         {role}
       </Badge>
+
+      {/* Theme Toggle */}
+      <ThemeToggle />
 
       {/* Dynamic Notifications Dropdown */}
       <DropdownMenu>

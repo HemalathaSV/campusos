@@ -1,5 +1,6 @@
 /**
  * Examination & Curriculum Data Store for Campus OS
+ * Supports Grade calculation, SGPA/CGPA evaluation, and Backlog / Supplementary Tracking
  */
 
 export interface SubjectCourse {
@@ -21,6 +22,9 @@ export interface StudentCourseGrade {
   gradePoint: number;    // 0 - 10
   gradeLetter: string;   // O, A+, A, B+, B, C, P, F
   status: "Pass" | "Fail";
+  isBacklog: boolean;
+  semester: number;
+  attemptNumber?: number;
 }
 
 export interface SemesterResult {
@@ -30,6 +34,16 @@ export interface SemesterResult {
   earnedCredits: number;
   status: "PASSED" | "FAILED";
   courses: StudentCourseGrade[];
+}
+
+export interface SupplementaryRegistration {
+  id: string;
+  studentId: string;
+  courseCode: string;
+  courseTitle: string;
+  examFee: number;
+  registrationDate: string;
+  status: "Registered" | "Admit Card Issued" | "Cleared";
 }
 
 export const branchCourses: SubjectCourse[] = [
@@ -87,12 +101,15 @@ export function generateStudentAcademicRecord(studentId: string, branchId: strin
     seed = (seed + studentId.charCodeAt(i) * (i + 1)) % 1000;
   }
 
+  // Check for student-specific overrides in localStorage (e.g. cleared backlogs)
+  const clearedBacklogs: string[] = JSON.parse(localStorage.getItem(`cleared_backlogs_${studentId}`) || "[]");
+
   const semesters: SemesterResult[] = [];
+  const allBacklogs: StudentCourseGrade[] = [];
 
   for (let sem = 1; sem <= currentSemester; sem++) {
     let coursesForSem = branchList.filter(c => c.semester === sem);
     if (coursesForSem.length === 0) {
-      // Fallback standard curriculum courses
       coursesForSem = [
         { code: `SUB${sem}01`, title: `Advanced Engineering Mathematics ${sem}`, credits: 4, type: "Theory", branchId, semester: sem },
         { code: `SUB${sem}02`, title: `Applied Core Engineering Principles ${sem}`, credits: 4, type: "Theory", branchId, semester: sem },
@@ -102,19 +119,33 @@ export function generateStudentAcademicRecord(studentId: string, branchId: strin
     }
 
     let totalPoints = 0;
-    let semCredits = 0;
+    let semTotalCredits = 0;
+    let semEarnedCredits = 0;
 
     const courseGrades: StudentCourseGrade[] = coursesForSem.map((course, idx) => {
-      // Deterministic grade distribution (mostly 65 - 95 with realistic variance)
-      const internal = 28 + ((seed + idx * 7 + sem * 11) % 12); // 28 to 39 / 40
-      const external = 40 + ((seed * 3 + idx * 13 + sem * 5) % 19); // 40 to 58 / 60
+      // Deterministic grade distribution
+      let internal = 28 + ((seed + idx * 7 + sem * 11) % 12);
+      let external = 40 + ((seed * 3 + idx * 13 + sem * 5) % 19);
+
+      // Controlled backlog simulation for students with seed % 5 === 0 (approx 20% of cohort)
+      // Only for earlier semesters
+      const isSimulatedBacklog = (seed % 4 === 0) && sem === 2 && idx === 1 && !clearedBacklogs.includes(course.code);
+
+      if (isSimulatedBacklog) {
+        internal = 12;
+        external = 18;
+      }
+
       const total = internal + external;
       const { gradePoint, gradeLetter, status } = calculateGrade(total);
 
-      totalPoints += gradePoint * course.credits;
-      semCredits += course.credits;
+      semTotalCredits += course.credits;
+      if (status === "Pass") {
+        totalPoints += gradePoint * course.credits;
+        semEarnedCredits += course.credits;
+      }
 
-      return {
+      const gradeObj: StudentCourseGrade = {
         courseCode: course.code,
         courseTitle: course.title,
         credits: course.credits,
@@ -124,17 +155,25 @@ export function generateStudentAcademicRecord(studentId: string, branchId: strin
         gradePoint,
         gradeLetter,
         status,
+        isBacklog: status === "Fail",
+        semester: sem,
       };
+
+      if (gradeObj.isBacklog) {
+        allBacklogs.push(gradeObj);
+      }
+
+      return gradeObj;
     });
 
-    const sgpa = semCredits === 0 ? 0 : Number((totalPoints / semCredits).toFixed(2));
+    const sgpa = semTotalCredits === 0 ? 0 : Number((totalPoints / semTotalCredits).toFixed(2));
 
     semesters.push({
       semester: sem,
       sgpa,
-      totalCredits: semCredits,
-      earnedCredits: semCredits,
-      status: "PASSED",
+      totalCredits: semTotalCredits,
+      earnedCredits: semEarnedCredits,
+      status: semEarnedCredits === semTotalCredits ? "PASSED" : "FAILED",
       courses: courseGrades,
     });
   }
@@ -147,7 +186,37 @@ export function generateStudentAcademicRecord(studentId: string, branchId: strin
   return {
     studentId,
     cgpa,
-    totalCreditsEarned: totalAllCredits,
+    totalCreditsEarned: semesters.reduce((sum, s) => sum + s.earnedCredits, 0),
+    totalDegreeCredits: totalAllCredits,
+    activeBacklogsCount: allBacklogs.length,
+    hasBacklogs: allBacklogs.length > 0,
+    backlogCourses: allBacklogs,
     semesters,
   };
+}
+
+export function registerSupplementaryExam(studentId: string, courseCode: string, courseTitle: string): SupplementaryRegistration {
+  const key = "campusos_supplementary_registrations";
+  const existing: SupplementaryRegistration[] = JSON.parse(localStorage.getItem(key) || "[]");
+  
+  const registration: SupplementaryRegistration = {
+    id: `suppl-${Date.now()}`,
+    studentId,
+    courseCode,
+    courseTitle,
+    examFee: 500,
+    registrationDate: new Date().toISOString().split("T")[0],
+    status: "Registered",
+  };
+
+  existing.push(registration);
+  localStorage.setItem(key, JSON.stringify(existing));
+  return registration;
+}
+
+export function getSupplementaryRegistrations(studentId?: string): SupplementaryRegistration[] {
+  const key = "campusos_supplementary_registrations";
+  const existing: SupplementaryRegistration[] = JSON.parse(localStorage.getItem(key) || "[]");
+  if (!studentId) return existing;
+  return existing.filter(r => r.studentId === studentId);
 }

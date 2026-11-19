@@ -1,6 +1,7 @@
 import {
   LayoutDashboard, Users, GraduationCap, IndianRupee, CalendarCheck,
-  FileText, Brain, Workflow, Settings, LogOut, ChevronDown, Award, Calendar
+  FileText, Brain, Workflow, Settings, LogOut, ChevronDown, Award, Calendar,
+  Briefcase, CalendarOff, BookOpen, Building, ShieldCheck
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -22,7 +23,12 @@ const adminNav = [
   { title: "Attendance", url: "/attendance", icon: CalendarCheck },
   { title: "Examinations", url: "/examinations", icon: Award },
   { title: "Timetable", url: "/timetable", icon: Calendar },
+  { title: "Placements", url: "/placements", icon: Briefcase },
+  { title: "Leaves", url: "/leaves", icon: CalendarOff },
+  { title: "Library", url: "/library", icon: BookOpen },
+  { title: "Hostel", url: "/hostel", icon: Building },
   { title: "Reports", url: "/reports", icon: FileText },
+  { title: "Parent Portal", url: "/parent-portal", icon: ShieldCheck },
   { title: "AI Insights", url: "/ai-insights", icon: Brain },
   { title: "Automation", url: "/automation", icon: Workflow },
 ];
@@ -33,7 +39,12 @@ const facultyNav = [
   { title: "Attendance", url: "/attendance", icon: CalendarCheck },
   { title: "Examinations", url: "/examinations", icon: Award },
   { title: "Timetable", url: "/timetable", icon: Calendar },
+  { title: "Placements", url: "/placements", icon: Briefcase },
+  { title: "Leaves", url: "/leaves", icon: CalendarOff },
+  { title: "Library", url: "/library", icon: BookOpen },
+  { title: "Hostel", url: "/hostel", icon: Building },
   { title: "Reports", url: "/reports", icon: FileText },
+  { title: "Parent Portal", url: "/parent-portal", icon: ShieldCheck },
 ];
 
 export function AppSidebar() {
@@ -54,6 +65,11 @@ export function AppSidebar() {
     { title: "Fees", url: "/fees", icon: IndianRupee },
     { title: "Examinations", url: "/examinations", icon: Award },
     { title: "Timetable", url: "/timetable", icon: Calendar },
+    { title: "Placements", url: "/placements", icon: Briefcase },
+    { title: "Leaves", url: "/leaves", icon: CalendarOff },
+    { title: "Library", url: "/library", icon: BookOpen },
+    { title: "Hostel", url: "/hostel", icon: Building },
+    { title: "Parent Portal", url: "/parent-portal", icon: ShieldCheck },
   ];
 
   const navItems = role === "admin" ? adminNav : role === "faculty" ? facultyNav : studentNav;

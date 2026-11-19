@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { ThemeProvider } from "next-themes";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -25,6 +26,11 @@ import StudentProfile from "./pages/StudentProfile";
 import Profile from "./pages/Profile";
 import Examinations from "./pages/Examinations";
 import Timetable from "./pages/Timetable";
+import Placements from "./pages/Placements";
+import Leaves from "./pages/Leaves";
+import Library from "./pages/Library";
+import Hostel from "./pages/Hostel";
+import ParentPortal from "./pages/ParentPortal";
 
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
@@ -32,12 +38,13 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
@@ -45,6 +52,7 @@ const App = () => (
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/admissions/apply" element={<AdmissionApply />} />
+            <Route path="/parent-portal" element={<ParentPortal />} />
             
             <Route element={<ProtectedRoute />}>
               <Route path="/dashboard" element={<Dashboard />} />
@@ -62,6 +70,10 @@ const App = () => (
               <Route path="/fees" element={<Fees />} />
               <Route path="/examinations" element={<Examinations />} />
               <Route path="/timetable" element={<Timetable />} />
+              <Route path="/placements" element={<Placements />} />
+              <Route path="/leaves" element={<Leaves />} />
+              <Route path="/library" element={<Library />} />
+              <Route path="/hostel" element={<Hostel />} />
             </Route>
 
             <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
@@ -74,6 +86,7 @@ const App = () => (
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 
