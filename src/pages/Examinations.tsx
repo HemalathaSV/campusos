@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +36,13 @@ import {
   Printer,
   RotateCcw,
   Clock,
-  ShieldCheck
+  ShieldCheck,
+  QrCode,
+  Smartphone,
+  Check,
+  Loader2,
+  ArrowRight,
+  ExternalLink
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -71,6 +78,8 @@ export default function Examinations() {
   );
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [selectedBacklogForRegistration, setSelectedBacklogForRegistration] = useState<any | null>(null);
+  const [paymentStep, setPaymentStep] = useState<"details" | "scanner" | "processing" | "success">("details");
+  const [activeReceiptNumber, setActiveReceiptNumber] = useState("");
 
   // Admin / Faculty active tab
   const [adminTab, setAdminTab] = useState<"evaluation" | "backlogs">("evaluation");
@@ -82,23 +91,44 @@ export default function Examinations() {
     }
   }, [currentStudent?.id]);
 
-  const handleRegisterSupplementary = (course: any) => {
+  const handleOpenRegistrationModal = (course: any) => {
+    setSelectedBacklogForRegistration(course);
+    setPaymentStep("details");
+    setIsRegisterModalOpen(true);
+  };
+
+  const handleProceedToUpiScanner = () => {
+    setPaymentStep("scanner");
+  };
+
+  const handleCompleteUpiPayment = (course: any) => {
     if (!currentStudent?.id) return;
-    const reg = registerSupplementaryExam(currentStudent.id, course.courseCode, course.courseTitle);
-    setSupplementaryList(getSupplementaryRegistrations(currentStudent.id));
-    setIsRegisterModalOpen(false);
+    setPaymentStep("processing");
 
-    toast({
-      title: "Supplementary Registration Confirmed",
-      description: `Registered for ${course.courseCode}: ${course.courseTitle}. Exam fee ₹500 recorded.`,
-    });
+    setTimeout(() => {
+      const reg = registerSupplementaryExam(
+        currentStudent.id,
+        course.courseCode,
+        course.courseTitle,
+        "UPI QR Code (SBI Gateway)",
+        "Admit Card Issued"
+      );
+      setActiveReceiptNumber(reg.receiptNumber || `REC-SUPPL-${Math.floor(100000 + Math.random() * 900000)}`);
+      setSupplementaryList(getSupplementaryRegistrations(currentStudent.id));
+      setPaymentStep("success");
 
-    addNotification({
-      title: "Supplementary Exam Registered",
-      message: `You registered for ${course.courseCode} supplementary examination. Admit card will be released 7 days before re-test.`,
-      type: "info",
-      targetRole: "student",
-    });
+      toast({
+        title: "UPI Payment Successful! (₹500.00)",
+        description: `Supplementary fee received for ${course.courseCode}. Re-test admit card generated.`,
+      });
+
+      addNotification({
+        title: "Supplementary Exam Fee Paid (₹500)",
+        message: `Payment of ₹500 verified for ${course.courseCode} (${course.courseTitle}). Hall ticket & admit card issued.`,
+        type: "success",
+        targetRole: "student",
+      });
+    }, 1200);
   };
 
   const handleSimulateClearBacklog = (courseCode: string) => {
@@ -417,10 +447,7 @@ export default function Examinations() {
                                 size="sm"
                                 variant="destructive"
                                 className="h-8 text-xs gap-1.5"
-                                onClick={() => {
-                                  setSelectedBacklogForRegistration(backlog);
-                                  setIsRegisterModalOpen(true);
-                                }}
+                                onClick={() => handleOpenRegistrationModal(backlog)}
                               >
                                 <RotateCcw className="h-3.5 w-3.5" /> Register for Re-Exam (₹500)
                               </Button>
@@ -541,6 +568,7 @@ export default function Examinations() {
                       <TableHead className="text-center">Grade Point</TableHead>
                       <TableHead className="text-center">Letter Grade</TableHead>
                       <TableHead className="text-center">Result</TableHead>
+                      <TableHead>Diagnostic Guidance</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -572,6 +600,10 @@ export default function Examinations() {
                           <Badge variant="outline" className="text-xs bg-success/5 text-success border-success/30">
                             {course.status}
                           </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs max-w-xs text-muted-foreground">
+                          <p className="font-medium text-foreground">{course.performanceRemark}</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">{course.remedialRecommendation}</p>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -903,19 +935,30 @@ export default function Examinations() {
                               {record.cgpa}
                             </TableCell>
                             <TableCell className="text-center">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 text-xs"
-                                onClick={() => {
-                                  toast({
-                                    title: "Remedial Notice Dispatched",
-                                    description: `Notification and counselor alert sent to ${student.name} (${student.usn}).`,
-                                  });
-                                }}
-                              >
-                                Send Notice
-                              </Button>
+                              <div className="flex items-center justify-center gap-1.5">
+                                <Link to={`/students/${student.id}`}>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/5"
+                                  >
+                                    <ExternalLink className="h-3 w-3" /> 360° Profile
+                                  </Button>
+                                </Link>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                                  onClick={() => {
+                                    toast({
+                                      title: "Remedial Notice Dispatched",
+                                      description: `Notification and counselor alert sent to ${student.name} (${student.usn}).`,
+                                    });
+                                  }}
+                                >
+                                  Notice
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -928,56 +971,202 @@ export default function Examinations() {
           </div>
         )}
 
-        {/* Supplementary Exam Registration Confirmation Modal */}
+        {/* Supplementary Exam Registration & Interactive UPI QR Scanner Modal */}
         <Dialog open={isRegisterModalOpen} onOpenChange={setIsRegisterModalOpen}>
           <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <RotateCcw className="h-5 w-5 text-primary" /> Confirm Supplementary Exam Registration
-              </DialogTitle>
-              <DialogDescription>
-                Review details for re-examination registration. Exam fee will be billed to your semester ledger.
-              </DialogDescription>
-            </DialogHeader>
+            {paymentStep === "details" && (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <RotateCcw className="h-5 w-5 text-primary" /> Supplementary Re-Exam Registration
+                  </DialogTitle>
+                  <DialogDescription>
+                    Review course arrears details and proceed to UPI fee payment gateway.
+                  </DialogDescription>
+                </DialogHeader>
 
-            {selectedBacklogForRegistration && (
-              <div className="space-y-3 py-2 text-sm">
-                <div className="p-3 rounded-lg bg-muted/50 border border-border space-y-1.5">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground text-xs">Course Code:</span>
-                    <span className="font-mono font-bold text-primary">{selectedBacklogForRegistration.courseCode}</span>
+                {selectedBacklogForRegistration && (
+                  <div className="space-y-3 py-2 text-sm">
+                    <div className="p-3.5 rounded-lg bg-muted/50 border border-border space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground text-xs">Course Code:</span>
+                        <span className="font-mono font-bold text-primary">{selectedBacklogForRegistration.courseCode}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground text-xs">Subject Title:</span>
+                        <span className="font-medium text-right text-xs">{selectedBacklogForRegistration.courseTitle}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground text-xs">Original Semester:</span>
+                        <span className="text-xs">Semester {selectedBacklogForRegistration.semester}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground text-xs">Payment Method:</span>
+                        <span className="text-xs font-semibold flex items-center gap-1 text-primary">
+                          <Smartphone className="h-3 w-3" /> Instant UPI QR Code
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-t border-border pt-2 mt-2">
+                        <span className="font-semibold text-xs">Re-Exam Fee:</span>
+                        <span className="font-bold text-success font-mono text-base">₹500.00</span>
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-info/10 border border-info/20 text-xs text-info flex items-center gap-2">
+                      <Clock className="h-4 w-4 shrink-0" />
+                      <span>Upon payment confirmation, your hall ticket and admit card will be generated immediately.</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground text-xs">Subject Title:</span>
-                    <span className="font-medium text-right">{selectedBacklogForRegistration.courseTitle}</span>
+                )}
+
+                <DialogFooter className="gap-2 sm:gap-0">
+                  <Button variant="outline" onClick={() => setIsRegisterModalOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    className="gradient-primary border-0 gap-1.5"
+                    onClick={handleProceedToUpiScanner}
+                  >
+                    <QrCode className="h-4 w-4" /> Open UPI Scanner (₹500)
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+
+            {paymentStep === "scanner" && (
+              <>
+                <DialogHeader className="text-center sm:text-center">
+                  <DialogTitle className="flex items-center justify-center gap-2">
+                    <QrCode className="h-5 w-5 text-primary" /> Scan to Pay with Any UPI App
+                  </DialogTitle>
+                  <DialogDescription>
+                    Scan using Google Pay, PhonePe, Paytm, or BHIM
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="flex flex-col items-center py-3 space-y-3">
+                  {/* Dynamic Styled UPI QR Code Graphic */}
+                  <div className="relative p-3 bg-white rounded-2xl shadow-md border-2 border-primary/20 flex flex-col items-center">
+                    <svg viewBox="0 0 100 100" className="w-44 h-44 text-black fill-current">
+                      {/* Corner 1 */}
+                      <rect x="5" y="5" width="28" height="28" rx="4" fill="none" stroke="#1e293b" strokeWidth="6" />
+                      <rect x="13" y="13" width="12" height="12" rx="2" fill="#2563eb" />
+                      {/* Corner 2 */}
+                      <rect x="67" y="5" width="28" height="28" rx="4" fill="none" stroke="#1e293b" strokeWidth="6" />
+                      <rect x="75" y="13" width="12" height="12" rx="2" fill="#2563eb" />
+                      {/* Corner 3 */}
+                      <rect x="5" y="67" width="28" height="28" rx="4" fill="none" stroke="#1e293b" strokeWidth="6" />
+                      <rect x="13" y="75" width="12" height="12" rx="2" fill="#2563eb" />
+                      {/* Matrix Patterns */}
+                      <rect x="40" y="8" width="6" height="6" fill="#1e293b" />
+                      <rect x="52" y="8" width="6" height="6" fill="#1e293b" />
+                      <rect x="40" y="20" width="6" height="6" fill="#1e293b" />
+                      <rect x="46" y="26" width="6" height="6" fill="#2563eb" />
+                      <rect x="8" y="40" width="6" height="6" fill="#1e293b" />
+                      <rect x="20" y="40" width="6" height="6" fill="#1e293b" />
+                      <rect x="14" y="46" width="6" height="6" fill="#2563eb" />
+                      <rect x="40" y="40" width="20" height="20" rx="3" fill="#2563eb" />
+                      <rect x="45" y="45" width="10" height="10" fill="#ffffff" />
+                      <rect x="68" y="42" width="8" height="8" fill="#1e293b" />
+                      <rect x="82" y="42" width="6" height="6" fill="#1e293b" />
+                      <rect x="76" y="52" width="8" height="8" fill="#2563eb" />
+                      <rect x="40" y="68" width="8" height="8" fill="#1e293b" />
+                      <rect x="54" y="74" width="8" height="8" fill="#2563eb" />
+                      <rect x="42" y="84" width="6" height="6" fill="#1e293b" />
+                      <rect x="68" y="68" width="8" height="8" fill="#1e293b" />
+                      <rect x="80" y="74" width="8" height="8" fill="#1e293b" />
+                      <rect x="72" y="86" width="14" height="6" fill="#2563eb" />
+                    </svg>
+
+                    <div className="mt-1 text-center text-slate-800">
+                      <p className="font-mono text-xs font-bold tracking-tight">campusos-exams@sbi</p>
+                      <p className="text-[10px] text-slate-500 font-semibold">Campus OS Examination Cell</p>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground text-xs">Original Semester:</span>
-                    <span>Semester {selectedBacklogForRegistration.semester}</span>
+
+                  {/* Payment Details Pill */}
+                  <div className="w-full text-center space-y-1">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-success/15 text-success font-mono font-bold text-sm">
+                      Amount: ₹500.00
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Ref: <strong>{selectedBacklogForRegistration?.courseCode}</strong> Supplementary Re-Test
+                    </p>
                   </div>
-                  <div className="flex justify-between border-t border-border pt-1.5 mt-1.5">
-                    <span className="font-semibold text-xs">Re-Exam Fee:</span>
-                    <span className="font-bold text-success font-mono">₹500.00</span>
+
+                  {/* Supported UPI Apps */}
+                  <div className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground border-t border-border/50 pt-2 w-full">
+                    <span className="font-semibold text-xs">Apps:</span>
+                    <Badge variant="outline" className="text-[10px]">Google Pay</Badge>
+                    <Badge variant="outline" className="text-[10px]">PhonePe</Badge>
+                    <Badge variant="outline" className="text-[10px]">Paytm</Badge>
+                    <Badge variant="outline" className="text-[10px]">BHIM</Badge>
                   </div>
                 </div>
 
-                <p className="text-xs text-muted-foreground">
-                  By clicking confirm, an admit card requisition will be initiated. The examination timetable and hall ticket will appear under your Examinations dashboard.
-                </p>
+                <DialogFooter className="gap-2 sm:gap-0">
+                  <Button variant="outline" onClick={() => setPaymentStep("details")}>
+                    Back
+                  </Button>
+                  <Button
+                    className="gradient-primary border-0 gap-1.5 font-medium"
+                    onClick={() => selectedBacklogForRegistration && handleCompleteUpiPayment(selectedBacklogForRegistration)}
+                  >
+                    <CheckCircle2 className="h-4 w-4" /> Simulate Scan & Pay (₹500)
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+
+            {paymentStep === "processing" && (
+              <div className="py-12 flex flex-col items-center justify-center space-y-4 text-center">
+                <Loader2 className="h-10 w-10 text-primary animate-spin" />
+                <div>
+                  <h4 className="font-semibold text-base">Verifying UPI Transaction</h4>
+                  <p className="text-xs text-muted-foreground mt-1">Connecting with SBI Payment Gateway API...</p>
+                </div>
               </div>
             )}
 
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="outline" onClick={() => setIsRegisterModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                className="gradient-primary border-0"
-                onClick={() => selectedBacklogForRegistration && handleRegisterSupplementary(selectedBacklogForRegistration)}
-              >
-                Confirm & Pay ₹500
-              </Button>
-            </DialogFooter>
+            {paymentStep === "success" && (
+              <>
+                <div className="py-6 flex flex-col items-center justify-center space-y-3 text-center">
+                  <div className="h-14 w-14 rounded-full bg-success/20 text-success flex items-center justify-center">
+                    <CheckCircle2 className="h-8 w-8" />
+                  </div>
+                  <h3 className="font-display font-bold text-lg text-foreground">
+                    Payment Verified & Admit Card Issued! 🎉
+                  </h3>
+                  <p className="text-xs text-muted-foreground max-w-xs">
+                    Your supplementary registration fee for <strong>{selectedBacklogForRegistration?.courseCode}</strong> has been successfully credited.
+                  </p>
+
+                  <div className="w-full p-3 rounded-lg bg-muted/40 border border-border text-xs space-y-1.5 text-left mt-2">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Receipt Number:</span>
+                      <span className="font-mono font-bold text-primary">{activeReceiptNumber}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Amount Paid:</span>
+                      <span className="font-mono font-bold text-success">₹500.00</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Admit Card:</span>
+                      <Badge className="bg-success text-success-foreground border-0 text-[10px]">Generated / Hall Ticket Ready</Badge>
+                    </div>
+                  </div>
+                </div>
+
+                <DialogFooter>
+                  <Button
+                    className="w-full gradient-primary border-0"
+                    onClick={() => setIsRegisterModalOpen(false)}
+                  >
+                    Done & View Admit Card
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
           </DialogContent>
         </Dialog>
       </div>

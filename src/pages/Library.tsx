@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,8 +35,48 @@ import {
   RotateCcw,
   BookMarked,
   Layers,
-  MapPin
+  MapPin,
+  ExternalLink,
+  Bell
 } from "lucide-react";
+
+function getDueStatus(dueDateStr: string, status: string, fineAmount: number) {
+  if (status === "Returned") {
+    return {
+      label: "Returned",
+      badgeClass: "bg-muted text-muted-foreground",
+    };
+  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(dueDateStr);
+  due.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    const overdueDays = Math.abs(diffDays);
+    return {
+      label: `Overdue by ${overdueDays}d (Fine: ₹${fineAmount})`,
+      badgeClass: "bg-destructive/20 text-destructive border-destructive/40 font-bold",
+    };
+  }
+  if (diffDays === 0) {
+    return {
+      label: "Due Today!",
+      badgeClass: "bg-warning/20 text-warning border-warning/40 font-bold animate-pulse",
+    };
+  }
+  if (diffDays <= 3) {
+    return {
+      label: `Due Soon (${diffDays}d left)`,
+      badgeClass: "bg-warning/20 text-warning border-warning/40 font-semibold",
+    };
+  }
+  return {
+    label: `Active (${diffDays}d remaining)`,
+    badgeClass: "bg-success/20 text-success border-success/30 font-semibold",
+  };
+}
 
 export default function Library() {
   const { role, user, collegeId } = useAuth();
@@ -51,7 +92,11 @@ export default function Library() {
   const [borrowedList, setBorrowedList] = useState<BorrowedBook[]>(() => getBorrowedRecords());
   const [searchQuery, setSearchQuery] = useState("");
   const [branchFilter, setBranchFilter] = useState("all");
-  const [activeTab, setActiveTab] = useState("catalog");
+  const [activeTab, setActiveTab] = useState(role === "student" ? "catalog" : "circulation");
+
+  // Borrower search state (Faculty / Admin)
+  const [borrowerSearch, setBorrowerSearch] = useState("");
+  const [circulationStatusFilter, setCirculationStatusFilter] = useState("all");
 
   // Add Book Dialog State (Admin/Librarian)
   const [isAddBookOpen, setIsAddBookOpen] = useState(false);
@@ -83,6 +128,22 @@ export default function Library() {
   const activeStudentBorrows = useMemo(() => {
     return studentBorrows.filter(b => b.status !== "Returned");
   }, [studentBorrows]);
+
+  const filteredCirculation = useMemo(() => {
+    return borrowedList.filter(b => {
+      const matchSearch =
+        b.bookTitle.toLowerCase().includes(borrowerSearch.toLowerCase()) ||
+        b.studentName.toLowerCase().includes(borrowerSearch.toLowerCase()) ||
+        b.usn.toLowerCase().includes(borrowerSearch.toLowerCase()) ||
+        b.isbn.toLowerCase().includes(borrowerSearch.toLowerCase());
+      const matchStatus =
+        circulationStatusFilter === "all" ||
+        (circulationStatusFilter === "active" && b.status !== "Returned") ||
+        (circulationStatusFilter === "overdue" && b.status === "Overdue") ||
+        (circulationStatusFilter === "returned" && b.status === "Returned");
+      return matchSearch && matchStatus;
+    });
+  }, [borrowedList, borrowerSearch, circulationStatusFilter]);
 
   const handleBorrow = (book: BookItem) => {
     if (!currentStudent) return;
@@ -278,17 +339,22 @@ export default function Library() {
           </Card>
         </div>
 
-        {/* Tabs: Catalog vs My Borrowed vs All Issued */}
+        {/* Tabs: Catalog vs My Borrowed vs Circulation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
             <TabsList>
               <TabsTrigger value="catalog" className="gap-2">
                 <BookOpen className="h-4 w-4" /> Book Catalog ({filteredCatalog.length})
               </TabsTrigger>
-              <TabsTrigger value="my-borrows" className="gap-2">
-                <Bookmark className="h-4 w-4" />
-                {role === "student" ? `My Borrowed Books (${activeStudentBorrows.length})` : `All Issued Records (${borrowedList.length})`}
-              </TabsTrigger>
+              {role === "student" ? (
+                <TabsTrigger value="my-borrows" className="gap-2">
+                  <Bookmark className="h-4 w-4" /> My Borrowed Books ({activeStudentBorrows.length})
+                </TabsTrigger>
+              ) : (
+                <TabsTrigger value="circulation" className="gap-2">
+                  <BookMarked className="h-4 w-4" /> Circulation & Borrower Audit ({borrowedList.length})
+                </TabsTrigger>
+              )}
             </TabsList>
 
             {activeTab === "catalog" && (
@@ -387,15 +453,13 @@ export default function Library() {
             </div>
           </TabsContent>
 
-          {/* Borrowed Records Tab */}
+          {/* Student "My Borrowed Books" Tab with Live Countdown */}
           <TabsContent value="my-borrows" className="mt-4">
             <Card className="border-border/50">
               <CardHeader className="pb-3 border-b border-border/50">
-                <CardTitle className="font-display text-base">
-                  {role === "student" ? "My Active & Past Borrowings" : "All College Issued Book Ledgers"}
-                </CardTitle>
-                <CardDescription>
-                  Keep track of book return dates and ensure timely returns to avoid library late fines
+                <CardTitle className="font-display text-base">My Active & Past Borrowings</CardTitle>
+                <CardDescription className="text-xs">
+                  Keep track of book return deadlines and live days remaining countdowns to avoid library late fines
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
@@ -404,66 +468,156 @@ export default function Library() {
                     <TableRow>
                       <TableHead>Book Title</TableHead>
                       <TableHead>ISBN</TableHead>
-                      {role !== "student" && <TableHead>Issued To</TableHead>}
-                      <TableHead className="text-center">Borrow Date</TableHead>
-                      <TableHead className="text-center">Due Date</TableHead>
-                      <TableHead className="text-center">Status</TableHead>
-                      <TableHead className="text-center">Fine</TableHead>
+                      <TableHead className="text-center">Issued On</TableHead>
+                      <TableHead className="text-center">Return Due Date</TableHead>
+                      <TableHead className="text-center">Due Countdown Status</TableHead>
                       <TableHead className="text-center">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(role === "student" ? studentBorrows : borrowedList).map(record => (
-                      <TableRow key={record.id}>
-                        <TableCell className="font-semibold text-xs max-w-xs">{record.bookTitle}</TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">{record.isbn}</TableCell>
-                        {role !== "student" && (
+                    {studentBorrows.map(record => {
+                      const dueInfo = getDueStatus(record.dueDate, record.status, record.fineAmount);
+                      return (
+                        <TableRow key={record.id}>
+                          <TableCell className="font-semibold text-xs max-w-xs">{record.bookTitle}</TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground">{record.isbn}</TableCell>
+                          <TableCell className="text-center font-mono text-xs">{record.borrowDate}</TableCell>
+                          <TableCell className="text-center font-mono text-xs font-semibold">{record.dueDate}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge className={`border text-xs ${dueInfo.badgeClass}`}>
+                              {dueInfo.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {record.status !== "Returned" ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs gap-1.5"
+                                onClick={() => handleReturn(record.id)}
+                              >
+                                <RotateCcw className="h-3 w-3" /> Return Book
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground font-mono">
+                                Returned on {record.returnDate}
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+                {studentBorrows.length === 0 && (
+                  <div className="p-8 text-center text-muted-foreground text-sm">
+                    No borrowing records found. Browse the library catalog above!
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Circulation & Borrower Audit Tab (Faculty & Admin View) */}
+          <TabsContent value="circulation" className="mt-4">
+            <Card className="border-border/50">
+              <CardHeader className="pb-3 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="font-display text-base">Book Circulation & Borrower Audit</CardTitle>
+                  <CardDescription className="text-xs">
+                    Institutional ledger of issued books, borrowing students, return deadlines, and overdue fines
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative w-full sm:w-60">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search student, USN, title..."
+                      value={borrowerSearch}
+                      onChange={e => setBorrowerSearch(e.target.value)}
+                      className="pl-8 h-9 text-xs"
+                    />
+                  </div>
+                  <select
+                    value={circulationStatusFilter}
+                    onChange={e => setCirculationStatusFilter(e.target.value)}
+                    className="h-9 rounded-md border border-input bg-background px-2.5 text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                  >
+                    <option value="all">All Circulations</option>
+                    <option value="active">Active Only</option>
+                    <option value="overdue">Overdue Only</option>
+                    <option value="returned">Returned</option>
+                  </select>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Book Title & ISBN</TableHead>
+                      <TableHead>Borrower Student</TableHead>
+                      <TableHead className="text-center">Issued On</TableHead>
+                      <TableHead className="text-center">Return Deadline</TableHead>
+                      <TableHead className="text-center">Due Status</TableHead>
+                      <TableHead className="text-center">Late Fine</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredCirculation.map(record => {
+                      const dueInfo = getDueStatus(record.dueDate, record.status, record.fineAmount);
+                      return (
+                        <TableRow key={record.id}>
+                          <TableCell className="text-xs">
+                            <span className="font-semibold text-foreground block">{record.bookTitle}</span>
+                            <span className="font-mono text-[11px] text-muted-foreground">{record.isbn}</span>
+                          </TableCell>
                           <TableCell className="text-xs">
                             <span className="font-medium">{record.studentName}</span>
                             <span className="block font-mono text-[11px] text-muted-foreground">{record.usn}</span>
                           </TableCell>
-                        )}
-                        <TableCell className="text-center font-mono text-xs">{record.borrowDate}</TableCell>
-                        <TableCell className="text-center font-mono text-xs">{record.dueDate}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge
-                            className={`border-0 text-xs font-semibold ${
-                              record.status === "Returned"
-                                ? "bg-muted text-muted-foreground"
-                                : record.status === "Overdue"
-                                ? "bg-destructive/20 text-destructive font-bold"
-                                : "bg-primary/20 text-primary"
-                            }`}
-                          >
-                            {record.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center font-mono font-bold text-xs text-destructive">
-                          {record.fineAmount > 0 ? `₹${record.fineAmount}` : "₹0"}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {record.status !== "Returned" ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs gap-1.5"
-                              onClick={() => handleReturn(record.id)}
-                            >
-                              <RotateCcw className="h-3 w-3" /> Return Book
-                            </Button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground font-mono">
-                              Returned on {record.returnDate}
-                            </span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                          <TableCell className="text-center font-mono text-xs">{record.borrowDate}</TableCell>
+                          <TableCell className="text-center font-mono text-xs font-semibold">{record.dueDate}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge className={`border-0 text-xs ${dueInfo.badgeClass}`}>
+                              {dueInfo.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center font-mono font-bold text-xs text-destructive">
+                            {record.fineAmount > 0 ? `₹${record.fineAmount}` : "₹0"}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <Link to={`/students/${record.studentId}`}>
+                                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/5">
+                                  <ExternalLink className="h-3 w-3" /> 360° Profile
+                                </Button>
+                              </Link>
+                              {record.status !== "Returned" && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                                  onClick={() => {
+                                    toast({
+                                      title: "Due Reminder Dispatched",
+                                      description: `Library notification sent to ${record.studentName} (${record.usn}) for "${record.bookTitle}".`,
+                                    });
+                                  }}
+                                >
+                                  <Bell className="h-3 w-3 mr-1" /> Remind
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
-                {(role === "student" ? studentBorrows : borrowedList).length === 0 && (
-                  <div className="p-8 text-center text-muted-foreground text-sm">
-                    No borrowing records found. Browse the library catalog above!
+                {filteredCirculation.length === 0 && (
+                  <div className="p-8 text-center text-muted-foreground text-xs">
+                    No circulation records found matching search filters.
                   </div>
                 )}
               </CardContent>

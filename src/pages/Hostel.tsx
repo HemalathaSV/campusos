@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +37,10 @@ import {
   Download,
   ShieldCheck,
   User,
-  Users
+  Users,
+  Search,
+  ExternalLink,
+  Phone
 } from "lucide-react";
 
 export default function Hostel() {
@@ -51,8 +55,9 @@ export default function Hostel() {
   // State
   const [rooms, setRooms] = useState<HostelRoom[]>(() => getHostelRooms());
   const [tickets, setTickets] = useState<MaintenanceTicket[]>(() => getMaintenanceTickets());
-  const [activeTab, setActiveTab] = useState("rooms");
+  const [activeTab, setActiveTab] = useState(role === "student" ? "rooms" : "directory");
   const [blockFilter, setBlockFilter] = useState("all");
+  const [residentSearch, setResidentSearch] = useState("");
 
   // Ticket Form Dialog State
   const [isNewTicketOpen, setIsNewTicketOpen] = useState(false);
@@ -66,6 +71,52 @@ export default function Hostel() {
   const studentRoom = useMemo(() => {
     return rooms.find(r => r.occupants.some(o => o.studentId === currentStudent?.id));
   }, [rooms, currentStudent]);
+
+  // Flattened resident directory for Faculty & Admin inspection
+  const allResidents = useMemo(() => {
+    const list: {
+      studentId: string;
+      name: string;
+      usn: string;
+      roomNumber: string;
+      block: string;
+      floor: number;
+      monthlyRent: number;
+      phone: string;
+      branch: string;
+    }[] = [];
+
+    rooms.forEach(r => {
+      r.occupants.forEach(o => {
+        const studentMatch = allStudents.find(s => s.id === o.studentId || s.usn === o.usn);
+        list.push({
+          studentId: o.studentId,
+          name: o.name,
+          usn: o.usn,
+          roomNumber: r.roomNumber,
+          block: r.block,
+          floor: r.floor,
+          monthlyRent: r.monthlyRent,
+          phone: studentMatch?.phone || "+91 98450 12345",
+          branch: typeof studentMatch?.branch === "object" ? studentMatch.branch.name : "Computer Science",
+        });
+      });
+    });
+
+    return list;
+  }, [rooms, allStudents]);
+
+  const filteredResidents = useMemo(() => {
+    if (!residentSearch.trim()) return allResidents;
+    const q = residentSearch.toLowerCase();
+    return allResidents.filter(
+      r =>
+        r.name.toLowerCase().includes(q) ||
+        r.usn.toLowerCase().includes(q) ||
+        r.roomNumber.toLowerCase().includes(q) ||
+        r.block.toLowerCase().includes(q)
+    );
+  }, [allResidents, residentSearch]);
 
   // Filtered rooms
   const filteredRooms = useMemo(() => {
@@ -274,10 +325,13 @@ export default function Hostel() {
           </Card>
         )}
 
-        {/* Tabs: Rooms vs Helpdesk */}
+        {/* Tabs: Directory vs Rooms vs Helpdesk */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
             <TabsList>
+              <TabsTrigger value="directory" className="gap-2">
+                <Users className="h-4 w-4" /> Resident Directory ({allResidents.length})
+              </TabsTrigger>
               <TabsTrigger value="rooms" className="gap-2">
                 <Bed className="h-4 w-4" /> Room Allocation Matrix ({filteredRooms.length})
               </TabsTrigger>
@@ -301,6 +355,78 @@ export default function Hostel() {
               </div>
             )}
           </div>
+
+          {/* Resident Directory Tab (Faculty & Admin focus) */}
+          <TabsContent value="directory" className="mt-4">
+            <Card className="border-border/50">
+              <CardHeader className="pb-3 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="font-display text-base">Hostel Resident Directory</CardTitle>
+                  <CardDescription className="text-xs">
+                    Institutional roster of enrolled hostel residents, block coordinates, and room assignments
+                  </CardDescription>
+                </div>
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search resident or room..."
+                    value={residentSearch}
+                    onChange={e => setResidentSearch(e.target.value)}
+                    className="pl-8 h-9 text-xs"
+                  />
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Student Resident</TableHead>
+                      <TableHead>Department</TableHead>
+                      <TableHead>Room & Block</TableHead>
+                      <TableHead className="text-center">Floor</TableHead>
+                      <TableHead>Contact Phone</TableHead>
+                      <TableHead className="text-center">Monthly Fee</TableHead>
+                      <TableHead className="text-center">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredResidents.map(resident => (
+                      <TableRow key={resident.studentId}>
+                        <TableCell>
+                          <div>
+                            <p className="font-semibold text-xs">{resident.name}</p>
+                            <p className="font-mono text-[11px] text-muted-foreground">{resident.usn}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{resident.branch}</TableCell>
+                        <TableCell className="text-xs">
+                          <span className="font-mono font-bold text-primary">{resident.roomNumber}</span>
+                          <span className="block text-[11px] text-muted-foreground">{resident.block}</span>
+                        </TableCell>
+                        <TableCell className="text-center font-mono text-xs">Floor {resident.floor}</TableCell>
+                        <TableCell className="text-xs font-mono">{resident.phone}</TableCell>
+                        <TableCell className="text-center font-mono font-bold text-success text-xs">
+                          ₹{resident.monthlyRent}/mo
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Link to={`/students/${resident.studentId}`}>
+                            <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-primary/30 text-primary">
+                              <ExternalLink className="h-3 w-3" /> 360° Profile
+                            </Button>
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {filteredResidents.length === 0 && (
+                  <div className="p-8 text-center text-muted-foreground text-xs">
+                    No hostel residents found matching search query.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* Rooms Grid */}
           <TabsContent value="rooms" className="mt-4">
@@ -368,20 +494,26 @@ export default function Hostel() {
                       </div>
 
                       <div className="pt-2 border-t border-border/50">
-                        {isAssignedToCurrent ? (
-                          <Button size="sm" variant="outline" disabled className="w-full h-8 text-xs text-primary border-primary/40 bg-primary/5">
-                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Currently Residing
-                          </Button>
+                        {role === "student" ? (
+                          isAssignedToCurrent ? (
+                            <Button size="sm" variant="outline" disabled className="w-full h-8 text-xs text-primary border-primary/40 bg-primary/5">
+                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Currently Residing
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              disabled={isFull}
+                              className={`w-full h-8 text-xs font-medium ${!isFull ? "gradient-primary border-0" : ""}`}
+                              variant={!isFull ? "default" : "outline"}
+                              onClick={() => handleAllocate(room.roomNumber)}
+                            >
+                              {isFull ? "Room Full" : "Allocate / Switch Room"}
+                            </Button>
+                          )
                         ) : (
-                          <Button
-                            size="sm"
-                            disabled={isFull}
-                            className={`w-full h-8 text-xs font-medium ${!isFull ? "gradient-primary border-0" : ""}`}
-                            variant={!isFull ? "default" : "outline"}
-                            onClick={() => handleAllocate(room.roomNumber)}
-                          >
-                            {isFull ? "Room Full" : "Allocate / Switch Room"}
-                          </Button>
+                          <div className="w-full text-center text-xs text-muted-foreground font-mono py-1.5 bg-muted/30 rounded border border-border/40">
+                            {room.occupied} / {room.capacity} Beds Allocated
+                          </div>
                         )}
                       </div>
                     </CardContent>

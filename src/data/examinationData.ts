@@ -25,6 +25,8 @@ export interface StudentCourseGrade {
   isBacklog: boolean;
   semester: number;
   attemptNumber?: number;
+  performanceRemark?: string;
+  remedialRecommendation?: string;
 }
 
 export interface SemesterResult {
@@ -44,6 +46,8 @@ export interface SupplementaryRegistration {
   examFee: number;
   registrationDate: string;
   status: "Registered" | "Admit Card Issued" | "Cleared";
+  receiptNumber?: string;
+  paymentMethod?: string;
 }
 
 export const branchCourses: SubjectCourse[] = [
@@ -89,6 +93,52 @@ export function calculateGrade(totalMarks: number): { gradePoint: number; gradeL
   if (totalMarks >= 50) return { gradePoint: 6, gradeLetter: "B", status: "Pass" };
   if (totalMarks >= 40) return { gradePoint: 5, gradeLetter: "C", status: "Pass" };
   return { gradePoint: 0, gradeLetter: "F", status: "Fail" };
+}
+
+export function getPerformanceRemark(totalMarks: number, internal: number, external: number): {
+  remark: string;
+  recommendation: string;
+} {
+  if (totalMarks < 40 || internal < 16 || external < 24) {
+    return {
+      remark: "Arrears Incurred: Course Not Cleared",
+      recommendation: "Remedial Coaching Required. Register for supplementary re-examination re-evaluation.",
+    };
+  }
+  if (totalMarks >= 90) {
+    return {
+      remark: "Outstanding Mastery (Grade O)",
+      recommendation: "Recommended for Department Academic Honors & Peer Mentorship.",
+    };
+  }
+  if (totalMarks >= 80) {
+    return {
+      remark: "Distinction (Grade A+)",
+      recommendation: "Eligible for Advanced Research Electives & Tier-1 Placement Fast-Track.",
+    };
+  }
+  if (totalMarks >= 70) {
+    return {
+      remark: "Very Good (Grade A)",
+      recommendation: "Strong theoretical understanding. Advised to build competitive GitHub portfolio projects.",
+    };
+  }
+  if (totalMarks >= 60) {
+    return {
+      remark: "Good (Grade B+)",
+      recommendation: "Consistent performance. Strengthen applied coding and lab assessments.",
+    };
+  }
+  if (totalMarks >= 50) {
+    return {
+      remark: "Above Average (Grade B)",
+      recommendation: "Focus on semester core subjects. Regular revision recommended.",
+    };
+  }
+  return {
+    remark: "Marginal Clearance (Grade C)",
+    recommendation: "Borderline pass. Recommended to attend faculty tutorial doubt-clearing sessions.",
+  };
 }
 
 export function generateStudentAcademicRecord(studentId: string, branchId: string = "cs", year: number = 2) {
@@ -145,6 +195,8 @@ export function generateStudentAcademicRecord(studentId: string, branchId: strin
         semEarnedCredits += course.credits;
       }
 
+      const { remark, recommendation } = getPerformanceRemark(total, internal, external);
+
       const gradeObj: StudentCourseGrade = {
         courseCode: course.code,
         courseTitle: course.title,
@@ -157,6 +209,8 @@ export function generateStudentAcademicRecord(studentId: string, branchId: strin
         status,
         isBacklog: status === "Fail",
         semester: sem,
+        performanceRemark: remark,
+        remedialRecommendation: recommendation,
       };
 
       if (gradeObj.isBacklog) {
@@ -195,7 +249,13 @@ export function generateStudentAcademicRecord(studentId: string, branchId: strin
   };
 }
 
-export function registerSupplementaryExam(studentId: string, courseCode: string, courseTitle: string): SupplementaryRegistration {
+export function registerSupplementaryExam(
+  studentId: string,
+  courseCode: string,
+  courseTitle: string,
+  paymentMethod: string = "UPI QR Code",
+  status: "Registered" | "Admit Card Issued" | "Cleared" = "Admit Card Issued"
+): SupplementaryRegistration {
   const key = "campusos_supplementary_registrations";
   const existing: SupplementaryRegistration[] = JSON.parse(localStorage.getItem(key) || "[]");
   
@@ -206,12 +266,24 @@ export function registerSupplementaryExam(studentId: string, courseCode: string,
     courseTitle,
     examFee: 500,
     registrationDate: new Date().toISOString().split("T")[0],
-    status: "Registered",
+    status,
+    receiptNumber: `REC-SUPPL-${Math.floor(100000 + Math.random() * 900000)}`,
+    paymentMethod,
   };
 
   existing.push(registration);
   localStorage.setItem(key, JSON.stringify(existing));
   return registration;
+}
+
+export function updateSupplementaryRegistrationStatus(
+  registrationId: string,
+  newStatus: SupplementaryRegistration["status"]
+): void {
+  const key = "campusos_supplementary_registrations";
+  const existing: SupplementaryRegistration[] = JSON.parse(localStorage.getItem(key) || "[]");
+  const updated = existing.map(r => (r.id === registrationId ? { ...r, status: newStatus } : r));
+  localStorage.setItem(key, JSON.stringify(updated));
 }
 
 export function getSupplementaryRegistrations(studentId?: string): SupplementaryRegistration[] {
