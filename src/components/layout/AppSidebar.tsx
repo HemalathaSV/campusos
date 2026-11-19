@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Users, GraduationCap, IndianRupee, CalendarCheck,
   FileText, Brain, Workflow, Settings, LogOut, ChevronDown, Award, Calendar,
-  Briefcase, CalendarOff, BookOpen, Building, ShieldCheck
+  Briefcase, CalendarOff, BookOpen, Building, ShieldCheck, RotateCcw
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -22,6 +22,7 @@ const adminNav = [
   { title: "Fees", url: "/fees", icon: IndianRupee },
   { title: "Attendance", url: "/attendance", icon: CalendarCheck },
   { title: "Examinations", url: "/examinations", icon: Award },
+  { title: "Backlogs & Retests", url: "/backlogs", icon: RotateCcw },
   { title: "Timetable", url: "/timetable", icon: Calendar },
   { title: "Placements", url: "/placements", icon: Briefcase },
   { title: "Leaves", url: "/leaves", icon: CalendarOff },
@@ -38,6 +39,7 @@ const facultyNav = [
   { title: "Students", url: "/students", icon: Users },
   { title: "Attendance", url: "/attendance", icon: CalendarCheck },
   { title: "Examinations", url: "/examinations", icon: Award },
+  { title: "Backlogs & Retests", url: "/backlogs", icon: RotateCcw },
   { title: "Timetable", url: "/timetable", icon: Calendar },
   { title: "Placements", url: "/placements", icon: Briefcase },
   { title: "Leaves", url: "/leaves", icon: CalendarOff },
@@ -64,6 +66,7 @@ export function AppSidebar() {
     { title: "My Profile", url: `/students/${(user as any)?.uid || "student-1"}`, icon: Users },
     { title: "Fees", url: "/fees", icon: IndianRupee },
     { title: "Examinations", url: "/examinations", icon: Award },
+  { title: "Backlogs & Retests", url: "/backlogs", icon: RotateCcw },
     { title: "Timetable", url: "/timetable", icon: Calendar },
     { title: "Placements", url: "/placements", icon: Briefcase },
     { title: "Leaves", url: "/leaves", icon: CalendarOff },

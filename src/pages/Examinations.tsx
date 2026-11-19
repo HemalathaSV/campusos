@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation, useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -60,8 +60,30 @@ import {
   CartesianGrid
 } from "recharts";
 
-export default function Examinations() {
+export default function Examinations({ defaultTab }: { defaultTab?: "evaluation" | "backlogs" | "transcripts" }) {
   const { role, user, collegeId } = useAuth();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+
+  const isBacklogRoute = defaultTab === "backlogs" || location.pathname === "/backlogs" || searchParams.get("tab") === "backlogs";
+
+  // Student active sub-tab: "transcripts" | "backlogs" | "admit-cards"
+  const [studentTab, setStudentTab] = useState<"transcripts" | "backlogs" | "admit-cards">(() => {
+    return isBacklogRoute ? "backlogs" : "transcripts";
+  });
+
+  // Admin / Faculty active tab
+  const [adminTab, setAdminTab] = useState<"evaluation" | "backlogs">(() => {
+    return isBacklogRoute ? "backlogs" : "evaluation";
+  });
+
+  useEffect(() => {
+    if (isBacklogRoute) {
+      setStudentTab("backlogs");
+      setAdminTab("backlogs");
+    }
+  }, [isBacklogRoute]);
+
   const allStudents = useMemo(() => getAllStudents(collegeId), [collegeId]);
 
   // Selectable student identity for student portal view
@@ -120,8 +142,7 @@ export default function Examinations() {
     "Demonstrated satisfactory understanding of core concepts in supplementary test viva."
   );
 
-  // Admin / Faculty active tab
-  const [adminTab, setAdminTab] = useState<"evaluation" | "backlogs">("evaluation");
+  // Supplementary Evaluation state
 
   const refreshAllRegistrations = () => {
     setAllSupplementaryRegistrations(getSupplementaryRegistrations());
@@ -534,11 +555,14 @@ export default function Examinations() {
                 </CardContent>
               </Card>
 
-              <Card className="border-border/50">
+              <Card
+                className="border-border/50 cursor-pointer hover:border-primary/50 transition-all group"
+                onClick={() => setStudentTab("backlogs")}
+              >
                 <CardContent className="p-5 flex items-center justify-between">
                   <div>
-                    <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider mb-1">
-                      Academic Standing
+                    <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider mb-1 flex items-center gap-1.5">
+                      Academic Standing & Arrears
                     </p>
                     <p
                       className={`text-3xl font-display font-bold ${
@@ -551,10 +575,11 @@ export default function Examinations() {
                             studentAcademicRecord.activeBacklogsCount > 1 ? "s" : ""
                           }`}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-2">
+                    <p className="text-xs text-primary font-medium mt-2 flex items-center gap-1 group-hover:underline">
                       {studentAcademicRecord.activeBacklogsCount === 0
-                        ? "0 Backlogs • Eligible for Campus Placement"
-                        : "Requires supplementary exam clearance"}
+                        ? "Open Backlogs & Retests Portal"
+                        : "Register for Re-Exam (₹500)"}{" "}
+                      <ArrowRight className="h-3 w-3" />
                     </p>
                   </div>
                   <div
@@ -574,127 +599,56 @@ export default function Examinations() {
               </Card>
             </div>
 
-            {/* Backlog Alert & Supplementary Re-Exam Management */}
-            {studentAcademicRecord.activeBacklogsCount > 0 && (
-              <Card className="border-destructive/30 bg-destructive/5 shadow-sm">
-                <CardHeader className="pb-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="h-5 w-5 text-destructive animate-pulse" />
-                      <CardTitle className="text-base font-semibold text-destructive">
-                        Active Backlog Courses ({studentAcademicRecord.activeBacklogsCount})
-                      </CardTitle>
-                    </div>
-                    <Badge variant="destructive" className="w-fit">
-                      Supplementary Registration Open
-                    </Badge>
-                  </div>
-                  <CardDescription className="text-xs">
-                    The following course(s) were not cleared during regular semester evaluations. You may register for upcoming supplementary re-examinations below.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 pt-0">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {studentAcademicRecord.backlogCourses.map(backlog => {
-                      const isRegistered = supplementaryList.some(r => r.courseCode === backlog.courseCode);
-                      return (
-                        <div
-                          key={backlog.courseCode}
-                          className="p-3.5 rounded-lg border border-border/80 bg-background/80 flex flex-col justify-between gap-3 shadow-xs"
-                        >
-                          <div>
-                            <div className="flex items-center justify-between">
-                              <span className="font-mono text-xs font-bold text-primary">{backlog.courseCode}</span>
-                              <Badge variant="outline" className="text-xs text-destructive border-destructive/40 bg-destructive/10">
-                                Grade F • Semester {backlog.semester}
-                              </Badge>
-                            </div>
-                            <h4 className="font-medium text-sm mt-1">{backlog.courseTitle}</h4>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              Credits: {backlog.credits} • Internal: {backlog.internalMarks}/40 • External: {backlog.externalMarks}/60 (Total: {backlog.totalMarks}/100)
-                            </p>
-                          </div>
-                          <div className="flex flex-col gap-2 pt-2 border-t border-border/50">
-                            {isRegistered ? (
-                              (() => {
-                                const reg = supplementaryList.find(r => r.courseCode === backlog.courseCode);
-                                if (reg?.status === "Approved - Passed") {
-                                  return (
-                                    <div className="p-2 rounded bg-success/10 border border-success/30 text-xs text-success flex items-center justify-between">
-                                      <span className="font-semibold flex items-center gap-1.5">
-                                        <CheckCircle2 className="h-4 w-4" /> Approved - PASSED (Score: {reg.retestMarks?.total}/100)
-                                      </span>
-                                      <span className="text-[10px] text-muted-foreground">Sign-off by {reg.evaluatedBy}</span>
-                                    </div>
-                                  );
-                                }
-                                if (reg?.status === "Approved - Failed") {
-                                  return (
-                                    <div className="space-y-1.5">
-                                      <div className="p-2 rounded bg-destructive/10 border border-destructive/30 text-xs text-destructive flex items-center justify-between">
-                                        <span className="font-semibold flex items-center gap-1.5">
-                                          <AlertTriangle className="h-4 w-4" /> Evaluated - FAILED ({reg.retestMarks?.total}/100)
-                                        </span>
-                                        <span className="text-[10px] text-muted-foreground">{reg.evaluatedBy}</span>
-                                      </div>
-                                      <Button
-                                        size="sm"
-                                        variant="destructive"
-                                        className="h-7 text-xs w-full gap-1.5"
-                                        onClick={() => handleOpenRegistrationModal(backlog)}
-                                      >
-                                        <RotateCcw className="h-3 w-3" /> Re-Register for Next Retest Cycle (₹500)
-                                      </Button>
-                                    </div>
-                                  );
-                                }
-                                return (
-                                  <div className="space-y-1">
-                                    <div className="flex items-center justify-between flex-wrap gap-1">
-                                      <Badge className="bg-warning/15 text-warning border-0 text-xs py-1 px-2.5 gap-1.5 font-medium">
-                                        <Clock className="h-3.5 w-3.5" /> Re-Exam Submitted • Awaiting Faculty Approval
-                                      </Badge>
-                                      <span className="text-[11px] font-mono text-muted-foreground">
-                                        Receipt: {reg?.receiptNumber || "REC-SUPPL"}
-                                      </span>
-                                    </div>
-                                    <p className="text-[11px] text-muted-foreground">
-                                      Answer scripts and practical test are pending official evaluation by <strong>Dr. Ramesh Kumar</strong>.
-                                    </p>
-                                  </div>
-                                );
-                              })()
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                className="h-8 text-xs gap-1.5 w-fit"
-                                onClick={() => handleOpenRegistrationModal(backlog)}
-                              >
-                                <RotateCcw className="h-3.5 w-3.5" /> Register for Re-Exam (₹500)
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+            {/* Student View Navigation Tabs */}
+            <div className="flex border-b border-border">
+              <Button
+                variant="ghost"
+                className={`rounded-none border-b-2 px-4 py-2 text-sm font-semibold transition-all ${
+                  studentTab === "transcripts"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setStudentTab("transcripts")}
+              >
+                <BookOpen className="h-4 w-4 mr-2" /> Semester Grade Transcripts
+              </Button>
+              <Button
+                variant="ghost"
+                className={`rounded-none border-b-2 px-4 py-2 text-sm font-semibold transition-all ${
+                  studentTab === "backlogs"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setStudentTab("backlogs")}
+              >
+                <RotateCcw className="h-4 w-4 mr-2" /> Backlogs & Retests Clearance
+                {studentAcademicRecord.activeBacklogsCount > 0 ? (
+                  <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0 h-4">
+                    {studentAcademicRecord.activeBacklogsCount} Active
+                  </Badge>
+                ) : (
+                  <Badge className="ml-2 text-[10px] px-1.5 py-0 h-4 bg-success/20 text-success border-0">
+                    0 Arrears
+                  </Badge>
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                className={`rounded-none border-b-2 px-4 py-2 text-sm font-semibold transition-all ${
+                  studentTab === "admit-cards"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setStudentTab("admit-cards")}
+              >
+                <Printer className="h-4 w-4 mr-2" /> Re-Exam Admit Cards ({supplementaryList.length})
+              </Button>
+            </div>
 
-                  {supplementaryList.length > 0 && (
-                    <div className="mt-3 p-3 rounded-lg bg-muted/40 border border-border text-xs flex items-center justify-between">
-                      <span className="text-muted-foreground">
-                        Registered for <strong>{supplementaryList.length}</strong> re-examination(s). Admit cards will be generated 7 days before examination dates.
-                      </span>
-                      <Badge variant="secondary" className="font-mono text-[11px]">
-                        Exam Fee Total: ₹{supplementaryList.length * 500}
-                      </Badge>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* SGPA Progress Chart */}
+            {/* Sub-Tab 1: Semester Grade Transcripts */}
+            {studentTab === "transcripts" && (
+              <div className="space-y-6">
+                {/* SGPA Progress Chart */}
             <Card className="border-border/50">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
@@ -860,7 +814,266 @@ export default function Examinations() {
               </CardContent>
             </Card>
           </div>
-        ) : (
+        )}
+
+        {/* Sub-Tab 2: Permanent Backlogs & Retests Clearance Portal */}
+        {studentTab === "backlogs" && (
+          <div className="space-y-6">
+            {studentAcademicRecord.activeBacklogsCount > 0 ? (
+              <Card className="border-destructive/30 bg-destructive/5 shadow-sm">
+                <CardHeader className="pb-3 border-b border-destructive/20">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-destructive animate-pulse" />
+                      <CardTitle className="text-base font-semibold text-destructive">
+                        Active Backlog Courses Requiring Re-Exam ({studentAcademicRecord.activeBacklogsCount})
+                      </CardTitle>
+                    </div>
+                    <Badge variant="destructive" className="w-fit">
+                      Supplementary Registration Open (₹500 / Paper)
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs">
+                    The course(s) below are uncleared. You can complete your supplementary exam registration via UPI and submit for faculty re-evaluation.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {studentAcademicRecord.backlogCourses.map(backlog => {
+                      const isRegistered = supplementaryList.some(r => r.courseCode === backlog.courseCode);
+                      return (
+                        <div
+                          key={backlog.courseCode}
+                          className="p-3.5 rounded-lg border border-border/80 bg-background flex flex-col justify-between gap-3 shadow-sm"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-xs font-bold text-primary">{backlog.courseCode}</span>
+                              <Badge variant="outline" className="text-xs text-destructive border-destructive/40 bg-destructive/10">
+                                Grade F • Semester {backlog.semester}
+                              </Badge>
+                            </div>
+                            <h4 className="font-medium text-sm mt-1">{backlog.courseTitle}</h4>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Credits: {backlog.credits} • Internal: {backlog.internalMarks}/40 • External: {backlog.externalMarks}/60 (Total: {backlog.totalMarks}/100)
+                            </p>
+                          </div>
+                          <div className="flex flex-col gap-2 pt-2 border-t border-border/50">
+                            {isRegistered ? (
+                              (() => {
+                                const reg = supplementaryList.find(r => r.courseCode === backlog.courseCode);
+                                if (reg?.status === "Approved - Passed") {
+                                  return (
+                                    <div className="p-2 rounded bg-success/10 border border-success/30 text-xs text-success flex items-center justify-between">
+                                      <span className="font-semibold flex items-center gap-1.5">
+                                        <CheckCircle2 className="h-4 w-4" /> Approved - PASSED (Score: {reg.retestMarks?.total}/100)
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground">Sign-off by {reg.evaluatedBy}</span>
+                                    </div>
+                                  );
+                                }
+                                if (reg?.status === "Approved - Failed") {
+                                  return (
+                                    <div className="space-y-1.5">
+                                      <div className="p-2 rounded bg-destructive/10 border border-destructive/30 text-xs text-destructive flex items-center justify-between">
+                                        <span className="font-semibold flex items-center gap-1.5">
+                                          <AlertTriangle className="h-4 w-4" /> Evaluated - FAILED ({reg.retestMarks?.total}/100)
+                                        </span>
+                                        <span className="text-[10px] text-muted-foreground">{reg.evaluatedBy}</span>
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        className="h-7 text-xs w-full gap-1.5"
+                                        onClick={() => handleOpenRegistrationModal(backlog)}
+                                      >
+                                        <RotateCcw className="h-3 w-3" /> Re-Register for Next Retest Cycle (₹500)
+                                      </Button>
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between flex-wrap gap-1">
+                                      <Badge className="bg-warning/15 text-warning border-0 text-xs py-1 px-2.5 gap-1.5 font-medium">
+                                        <Clock className="h-3.5 w-3.5" /> Re-Exam Submitted • Awaiting Faculty Approval
+                                      </Badge>
+                                      <span className="text-[11px] font-mono text-muted-foreground">
+                                        Receipt: {reg?.receiptNumber || "REC-SUPPL"}
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground">
+                                      Answer scripts and practical test are pending official evaluation by <strong>Dr. Ramesh Kumar</strong>.
+                                    </p>
+                                  </div>
+                                );
+                              })()
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="h-8 text-xs gap-1.5 w-fit"
+                                onClick={() => handleOpenRegistrationModal(backlog)}
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" /> Register for Re-Exam (₹500 via UPI)
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="border-success/30 bg-success/5 shadow-sm">
+                <CardContent className="p-8 text-center space-y-4">
+                  <div className="h-14 w-14 rounded-full bg-success/15 text-success flex items-center justify-center mx-auto">
+                    <CheckCircle2 className="h-8 w-8" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-bold text-lg text-foreground">
+                      Zero Active Backlogs! All Clear 🎉
+                    </h3>
+                    <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1">
+                      Current student <strong>{currentStudent.name}</strong> ({currentStudent.usn}) has cleared all course evaluations with 0 pending arrears. Eligible for campus placements and honors degree.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-primary/20 bg-background max-w-lg mx-auto text-left space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                      <h4 className="font-semibold text-xs text-primary uppercase tracking-wide">
+                        Test the Backlog & Re-Exam Clearance Flow
+                      </h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Arjun Reddy (USN 1SI22CS005) currently carries 1 active backlog in <strong>CS202 Object Oriented Design using Java</strong>. Switch to his profile below to experience the re-exam registration & faculty approval process.
+                    </p>
+                    <Button
+                      size="sm"
+                      className="gradient-primary border-0 text-xs gap-2"
+                      onClick={() => setSelectedStudentId("student-5")}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" /> Switch to Arjun Reddy Profile (1 Backlog)
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Supplementary Examination Rules & Guidelines */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3 border-b border-border/50">
+                <CardTitle className="font-display text-base flex items-center gap-2">
+                  <FileCheck className="h-4 w-4 text-primary" /> University Supplementary & Retest Regulations
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 text-xs space-y-3 text-muted-foreground">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-3 rounded-lg bg-muted/40 border border-border">
+                    <span className="font-semibold text-foreground block mb-0.5">Examination Fee</span>
+                    <p className="font-mono text-primary font-bold">₹500.00 / course</p>
+                    <p className="text-[11px] mt-1">Payable via instant UPI QR code scanner</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/40 border border-border">
+                    <span className="font-semibold text-foreground block mb-0.5">Faculty Evaluation</span>
+                    <p className="font-semibold text-foreground">Department Board</p>
+                    <p className="text-[11px] mt-1">Scored out of 100 with theory & practical viva</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/40 border border-border">
+                    <span className="font-semibold text-foreground block mb-0.5">Clearance Benchmark</span>
+                    <p className="font-semibold text-success">Minimum 40 / 100</p>
+                    <p className="text-[11px] mt-1">Grade P or higher to clear course backlog</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Sub-Tab 3: Re-Exam Admit Cards & Receipts */}
+        {studentTab === "admit-cards" && (
+          <Card className="border-border/50">
+            <CardHeader className="pb-3 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <CardTitle className="font-display text-base flex items-center gap-2">
+                  <Printer className="h-4 w-4 text-primary" /> Issued Re-Exam Hall Tickets & Admit Cards
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Official admit cards generated upon successful supplementary fee payment
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="font-mono text-xs w-fit">
+                {supplementaryList.length} Registrations
+              </Badge>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Course</TableHead>
+                    <TableHead>Receipt #</TableHead>
+                    <TableHead className="text-center">Fee Paid</TableHead>
+                    <TableHead className="text-center">Registration Date</TableHead>
+                    <TableHead className="text-center">Payment Gateway</TableHead>
+                    <TableHead className="text-center">Admit Card Status</TableHead>
+                    <TableHead className="text-center">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {supplementaryList.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-xs text-muted-foreground">
+                        No re-examination registrations found for {currentStudent.name}.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    supplementaryList.map(reg => (
+                      <TableRow key={reg.id}>
+                        <TableCell className="text-xs font-medium">
+                          <span className="font-mono font-bold text-primary block">{reg.courseCode}</span>
+                          <span className="text-muted-foreground">{reg.courseTitle}</span>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-primary">{reg.receiptNumber}</TableCell>
+                        <TableCell className="text-center font-mono text-xs font-bold text-success">
+                          ₹{reg.examFee}.00
+                        </TableCell>
+                        <TableCell className="text-center font-mono text-xs">{reg.registrationDate}</TableCell>
+                        <TableCell className="text-center text-xs text-muted-foreground">
+                          {reg.paymentMethod || "UPI QR Code"}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge className="bg-success/15 text-success border-0 text-[11px] font-medium">
+                            Hall Ticket Issued
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs gap-1"
+                            onClick={() => {
+                              toast({
+                                title: "Downloading Admit Card",
+                                description: `Generating printable PDF Hall Ticket for ${reg.courseCode}...`,
+                              });
+                              window.print();
+                            }}
+                          >
+                            <Download className="h-3 w-3" /> Print Card
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    ) : (
           /* =========================================================================
              FACULTY & ADMIN VIEW: Grade Entry, Evaluation & Backlog Management
              ========================================================================= */

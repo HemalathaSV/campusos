@@ -28,6 +28,7 @@ const routeNames: Record<string, string> = {
   "/fees": "Fees",
   "/attendance": "Attendance",
   "/examinations": "Examinations & Grading",
+  "/backlogs": "Backlogs & Retest Clearance",
   "/timetable": "Timetable & Classes",
   "/placements": "Campus Placements",
   "/leaves": "Leaves & Absence",
