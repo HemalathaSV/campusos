@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +20,7 @@ import {
   getStudentCourseMarks,
   generateStudentAcademicRecord,
   registerSupplementaryExam,
+  approveSupplementaryExam,
   getSupplementaryRegistrations,
   SupplementaryRegistration,
   SubjectCourse
@@ -100,19 +102,37 @@ export default function Examinations() {
   const [supplementaryList, setSupplementaryList] = useState<SupplementaryRegistration[]>(() =>
     getSupplementaryRegistrations(currentStudent?.id)
   );
+  const [allSupplementaryRegistrations, setAllSupplementaryRegistrations] = useState<SupplementaryRegistration[]>(() =>
+    getSupplementaryRegistrations()
+  );
+
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [selectedBacklogForRegistration, setSelectedBacklogForRegistration] = useState<any | null>(null);
   const [paymentStep, setPaymentStep] = useState<"details" | "scanner" | "processing" | "success">("details");
   const [activeReceiptNumber, setActiveReceiptNumber] = useState("");
 
+  // Faculty Supplementary Evaluation Dialog State
+  const [evaluatingSupplementary, setEvaluatingSupplementary] = useState<SupplementaryRegistration | null>(null);
+  const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
+  const [evalInternal, setEvalInternal] = useState(32);
+  const [evalExternal, setEvalExternal] = useState(48);
+  const [evalRemarks, setEvalRemarks] = useState(
+    "Demonstrated satisfactory understanding of core concepts in supplementary test viva."
+  );
+
   // Admin / Faculty active tab
   const [adminTab, setAdminTab] = useState<"evaluation" | "backlogs">("evaluation");
 
-  // Reload supplementary list when student changes
-  useEffect(() => {
+  const refreshAllRegistrations = () => {
+    setAllSupplementaryRegistrations(getSupplementaryRegistrations());
     if (currentStudent?.id) {
       setSupplementaryList(getSupplementaryRegistrations(currentStudent.id));
     }
+  };
+
+  // Reload supplementary list when student changes
+  useEffect(() => {
+    refreshAllRegistrations();
   }, [currentStudent?.id]);
 
   const handleOpenRegistrationModal = (course: any) => {
@@ -135,10 +155,12 @@ export default function Examinations() {
         course.courseCode,
         course.courseTitle,
         "UPI QR Code (SBI Gateway)",
-        "Admit Card Issued"
+        "Admit Card Issued",
+        currentStudent.name,
+        currentStudent.usn
       );
       setActiveReceiptNumber(reg.receiptNumber || `REC-SUPPL-${Math.floor(100000 + Math.random() * 900000)}`);
-      setSupplementaryList(getSupplementaryRegistrations(currentStudent.id));
+      refreshAllRegistrations();
       setPaymentStep("success");
 
       toast({
@@ -153,6 +175,58 @@ export default function Examinations() {
         targetRole: "student",
       });
     }, 1200);
+  };
+
+  const handleOpenEvalModal = (reg: SupplementaryRegistration) => {
+    setEvaluatingSupplementary(reg);
+    if (reg.retestMarks) {
+      setEvalInternal(reg.retestMarks.internal);
+      setEvalExternal(reg.retestMarks.external);
+    } else {
+      setEvalInternal(32);
+      setEvalExternal(48);
+    }
+    setEvalRemarks(
+      reg.evaluationRemarks ||
+        "Demonstrated satisfactory understanding of core concepts in supplementary test viva."
+    );
+    setIsEvalModalOpen(true);
+  };
+
+  const handleConfirmApproval = (decision: "Passed" | "Failed") => {
+    if (!evaluatingSupplementary) return;
+    const facultyName = (user as any)?.fullName || "Dr. Ramesh Kumar";
+    const updated = approveSupplementaryExam(
+      evaluatingSupplementary.id,
+      decision,
+      { internal: evalInternal, external: evalExternal },
+      facultyName,
+      evalRemarks
+    );
+
+    setIsEvalModalOpen(false);
+    refreshAllRegistrations();
+
+    if (decision === "Passed") {
+      toast({
+        title: "Supplementary Re-Exam: APPROVED (PASSED)",
+        description: `${evaluatingSupplementary.studentName || "Student"} has passed ${evaluatingSupplementary.courseCode} with ${evalInternal + evalExternal} marks. Backlog cleared!`,
+      });
+    } else {
+      toast({
+        title: "Supplementary Re-Exam: EVALUATED (FAILED)",
+        description: `${evaluatingSupplementary.studentName || "Student"} scored below pass mark in ${evaluatingSupplementary.courseCode}. Backlog remains active.`,
+        variant: "destructive",
+      });
+    }
+
+    // If currently evaluating the same course in evaluation view, sync local state
+    if (facultyCourseCode === evaluatingSupplementary.courseCode) {
+      setMarksState(prev => ({
+        ...prev,
+        [evaluatingSupplementary.studentId]: { internal: evalInternal, external: evalExternal },
+      }));
+    }
   };
 
   const handleSimulateClearBacklog = (courseCode: string) => {
@@ -540,30 +614,66 @@ export default function Examinations() {
                               Credits: {backlog.credits} • Internal: {backlog.internalMarks}/40 • External: {backlog.externalMarks}/60 (Total: {backlog.totalMarks}/100)
                             </p>
                           </div>
-                          <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+                          <div className="flex flex-col gap-2 pt-2 border-t border-border/50">
                             {isRegistered ? (
-                              <Badge className="bg-info/15 text-info border-0 text-xs py-1 px-2.5 gap-1.5">
-                                <Clock className="h-3.5 w-3.5" /> Supplementary Registered (₹500 Paid)
-                              </Badge>
+                              (() => {
+                                const reg = supplementaryList.find(r => r.courseCode === backlog.courseCode);
+                                if (reg?.status === "Approved - Passed") {
+                                  return (
+                                    <div className="p-2 rounded bg-success/10 border border-success/30 text-xs text-success flex items-center justify-between">
+                                      <span className="font-semibold flex items-center gap-1.5">
+                                        <CheckCircle2 className="h-4 w-4" /> Approved - PASSED (Score: {reg.retestMarks?.total}/100)
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground">Sign-off by {reg.evaluatedBy}</span>
+                                    </div>
+                                  );
+                                }
+                                if (reg?.status === "Approved - Failed") {
+                                  return (
+                                    <div className="space-y-1.5">
+                                      <div className="p-2 rounded bg-destructive/10 border border-destructive/30 text-xs text-destructive flex items-center justify-between">
+                                        <span className="font-semibold flex items-center gap-1.5">
+                                          <AlertTriangle className="h-4 w-4" /> Evaluated - FAILED ({reg.retestMarks?.total}/100)
+                                        </span>
+                                        <span className="text-[10px] text-muted-foreground">{reg.evaluatedBy}</span>
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        className="h-7 text-xs w-full gap-1.5"
+                                        onClick={() => handleOpenRegistrationModal(backlog)}
+                                      >
+                                        <RotateCcw className="h-3 w-3" /> Re-Register for Next Retest Cycle (₹500)
+                                      </Button>
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between flex-wrap gap-1">
+                                      <Badge className="bg-warning/15 text-warning border-0 text-xs py-1 px-2.5 gap-1.5 font-medium">
+                                        <Clock className="h-3.5 w-3.5" /> Re-Exam Submitted • Awaiting Faculty Approval
+                                      </Badge>
+                                      <span className="text-[11px] font-mono text-muted-foreground">
+                                        Receipt: {reg?.receiptNumber || "REC-SUPPL"}
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground">
+                                      Answer scripts and practical test are pending official evaluation by <strong>Dr. Ramesh Kumar</strong>.
+                                    </p>
+                                  </div>
+                                );
+                              })()
                             ) : (
                               <Button
                                 size="sm"
                                 variant="destructive"
-                                className="h-8 text-xs gap-1.5"
+                                className="h-8 text-xs gap-1.5 w-fit"
                                 onClick={() => handleOpenRegistrationModal(backlog)}
                               >
                                 <RotateCcw className="h-3.5 w-3.5" /> Register for Re-Exam (₹500)
                               </Button>
                             )}
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 text-xs text-muted-foreground hover:text-foreground ml-auto"
-                              title="Simulate Clearing Course"
-                              onClick={() => handleSimulateClearBacklog(backlog.courseCode)}
-                            >
-                              <ShieldCheck className="h-3.5 w-3.5 text-success mr-1" /> Clear in Retest
-                            </Button>
                           </div>
                         </div>
                       );
@@ -765,9 +875,25 @@ export default function Examinations() {
                 }`}
                 onClick={() => setAdminTab("evaluation")}
               >
-                <FileCheck className="h-4 w-4 mr-2" /> Grade Entry & Marksheets
+                <FileCheck className="h-4 w-4 mr-2" /> Regular Grade Entry & Marksheets
               </Button>
               <Button
+                variant="ghost"
+                className={`rounded-none border-b-2 px-4 py-2 text-sm font-semibold transition-all ${
+                  adminTab === "backlogs"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setAdminTab("backlogs")}
+              >
+                <AlertTriangle className="h-4 w-4 mr-2" /> Backlogs & Retest Approvals
+                {allSupplementaryRegistrations.filter(r => r.status === "Admit Card Issued" || r.status === "Under Evaluation").length > 0 && (
+                  <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0 h-4">
+                    {allSupplementaryRegistrations.filter(r => r.status === "Admit Card Issued" || r.status === "Under Evaluation").length}
+                  </Badge>
+                )}
+              </Button>
+            </div>
                 variant="ghost"
                 className={`rounded-none border-b-2 px-4 py-2 text-sm font-semibold transition-all ${
                   adminTab === "backlogs"
@@ -1008,12 +1134,117 @@ export default function Examinations() {
                     <CardContent className="p-4">
                       <p className="text-xs uppercase font-semibold text-muted-foreground">Supplementary Registrations</p>
                       <p className="text-2xl font-bold font-display text-primary mt-1">
-                        {getSupplementaryRegistrations().length}
+                        {allSupplementaryRegistrations.length}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">Pending re-exam processing</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {allSupplementaryRegistrations.filter(r => r.status === "Approved - Passed").length} Approved & Cleared
+                      </p>
                     </CardContent>
                   </Card>
                 </div>
+
+                {/* Supplementary Re-Exam Faculty Evaluation & Approvals Queue */}
+                <Card className="border-primary/30 bg-gradient-to-br from-primary/5 via-card to-background shadow-sm">
+                  <CardHeader className="pb-3 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <CardTitle className="font-display text-lg flex items-center gap-2">
+                        <FileCheck className="h-5 w-5 text-primary" /> Supplementary Re-Exam Faculty Approvals
+                      </CardTitle>
+                      <CardDescription>
+                        Review completed re-examinations, score test answer scripts, and officially approve Pass or Fail clearance.
+                      </CardDescription>
+                    </div>
+                    <Badge variant="outline" className="text-xs font-mono font-medium border-primary/30 text-primary w-fit">
+                      {allSupplementaryRegistrations.filter(r => r.status === "Admit Card Issued" || r.status === "Under Evaluation").length} Pending Review
+                    </Badge>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>USN</TableHead>
+                          <TableHead>Student Name</TableHead>
+                          <TableHead>Arrear Subject</TableHead>
+                          <TableHead className="text-center">Receipt #</TableHead>
+                          <TableHead className="text-center">Fee Paid</TableHead>
+                          <TableHead className="text-center">Exam Status</TableHead>
+                          <TableHead className="text-center">Score & Verdict</TableHead>
+                          <TableHead className="text-center">Faculty Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {allSupplementaryRegistrations.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={8} className="text-center py-6 text-xs text-muted-foreground">
+                              No supplementary re-examination registrations found.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          allSupplementaryRegistrations.map(reg => (
+                            <TableRow key={reg.id}>
+                              <TableCell className="font-mono text-xs font-semibold">{reg.usn || "1SI22CS005"}</TableCell>
+                              <TableCell className="font-medium text-sm">{reg.studentName || "Arjun Reddy"}</TableCell>
+                              <TableCell className="text-xs">
+                                <span className="font-mono font-bold text-primary block">{reg.courseCode}</span>
+                                <span className="text-muted-foreground">{reg.courseTitle}</span>
+                              </TableCell>
+                              <TableCell className="text-center font-mono text-xs text-muted-foreground">
+                                {reg.receiptNumber}
+                              </TableCell>
+                              <TableCell className="text-center font-mono text-xs font-semibold text-success">
+                                ₹{reg.examFee}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs ${
+                                    reg.status === "Approved - Passed"
+                                      ? "bg-success/10 text-success border-success/30 font-semibold"
+                                      : reg.status === "Approved - Failed"
+                                      ? "bg-destructive/10 text-destructive border-destructive/30 font-semibold"
+                                      : "bg-warning/10 text-warning border-warning/30 font-medium"
+                                  }`}
+                                >
+                                  {reg.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-center text-xs">
+                                {reg.retestMarks ? (
+                                  <div>
+                                    <span className="font-mono font-bold text-foreground">
+                                      {reg.retestMarks.total}/100 ({reg.retestMarks.gradeLetter})
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground block">
+                                      By {reg.evaluatedBy}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground italic text-[11px]">Pending Evaluation</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Button
+                                  size="sm"
+                                  className={`h-8 text-xs gap-1.5 font-medium ${
+                                    reg.status === "Approved - Passed"
+                                      ? "border border-success/30 bg-success/10 text-success hover:bg-success/20"
+                                      : "gradient-primary border-0"
+                                  }`}
+                                  onClick={() => handleOpenEvalModal(reg)}
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  {reg.status === "Approved - Passed" || reg.status === "Approved - Failed"
+                                    ? "Re-Evaluate / Edit"
+                                    : "Evaluate & Approve"}
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
 
                 <Card className="border-border/50">
                   <CardHeader className="pb-3 border-b border-border/50">
@@ -1296,6 +1527,149 @@ export default function Examinations() {
                   </Button>
                 </DialogFooter>
               </>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Faculty Evaluation & Pass/Fail Approval Modal */}
+        <Dialog open={isEvalModalOpen} onOpenChange={setIsEvalModalOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileCheck className="h-5 w-5 text-primary" /> Evaluate Supplementary Re-Exam
+              </DialogTitle>
+              <DialogDescription>
+                Score re-examination answers, verify practical viva, and officially approve Pass or Fail clearance.
+              </DialogDescription>
+            </DialogHeader>
+
+            {evaluatingSupplementary && (
+              <div className="space-y-4 py-2 text-sm">
+                {/* Student Context Card */}
+                <div className="p-3.5 rounded-lg bg-muted/50 border border-border space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground text-xs">Student Candidate:</span>
+                    <span className="font-semibold text-foreground text-xs">
+                      {evaluatingSupplementary.studentName || "Arjun Reddy"}{" "}
+                      <span className="font-mono text-muted-foreground">({evaluatingSupplementary.usn || "1SI22CS005"})</span>
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground text-xs">Course Arrear:</span>
+                    <span className="font-mono font-bold text-primary text-xs">
+                      {evaluatingSupplementary.courseCode} - {evaluatingSupplementary.courseTitle}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground text-xs">Registration Fee:</span>
+                    <span className="text-xs font-semibold text-success font-mono">
+                      ₹{evaluatingSupplementary.examFee} Paid (Receipt: {evaluatingSupplementary.receiptNumber})
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center border-t border-border pt-1.5 mt-1">
+                    <span className="text-muted-foreground text-xs">Original Score:</span>
+                    <Badge variant="destructive" className="text-[10px]">
+                      30/100 (Grade F - Fail)
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Score Input Fields */}
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase mb-1 block">
+                        Re-Exam Internal (Max 40)
+                      </label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={40}
+                        value={evalInternal}
+                        onChange={e => setEvalInternal(Math.max(0, Math.min(40, parseInt(e.target.value) || 0)))}
+                        className="font-mono font-bold text-center h-9"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase mb-1 block">
+                        Re-Exam External (Max 60)
+                      </label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={60}
+                        value={evalExternal}
+                        onChange={e => setEvalExternal(Math.max(0, Math.min(60, parseInt(e.target.value) || 0)))}
+                        className="font-mono font-bold text-center h-9"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Live Evaluation Preview */}
+                  <div className="p-3 rounded-lg border border-border/80 bg-background flex items-center justify-between">
+                    <div>
+                      <span className="text-xs text-muted-foreground">Computed Re-Exam Score:</span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xl font-bold font-mono text-primary">
+                          {evalInternal + evalExternal} <span className="text-xs font-normal text-muted-foreground">/ 100</span>
+                        </span>
+                        <Badge
+                          className={`border-0 font-bold text-xs ${
+                            calculateGrade(evalInternal + evalExternal).status === "Pass"
+                              ? "bg-success/15 text-success"
+                              : "bg-destructive/15 text-destructive"
+                          }`}
+                        >
+                          Grade {calculateGrade(evalInternal + evalExternal).gradeLetter}
+                        </Badge>
+                      </div>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={`text-xs font-bold py-1 px-3 ${
+                        calculateGrade(evalInternal + evalExternal).status === "Pass"
+                          ? "border-success/30 bg-success/5 text-success"
+                          : "border-destructive/30 bg-destructive/5 text-destructive"
+                      }`}
+                    >
+                      {calculateGrade(evalInternal + evalExternal).status === "Pass" ? "ELIGIBLE TO PASS" : "BELOW PASS MARK"}
+                    </Badge>
+                  </div>
+
+                  {/* Examiner Remarks */}
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase mb-1 block">
+                      Examiner Evaluation Remarks & Sign-off
+                    </label>
+                    <Textarea
+                      rows={2}
+                      value={evalRemarks}
+                      onChange={e => setEvalRemarks(e.target.value)}
+                      placeholder="e.g. Completed viva, verified lab experiments, demonstrated satisfactory understanding."
+                      className="text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Faculty Decision Buttons */}
+                <div className="flex flex-col sm:flex-row items-center gap-2 pt-2 border-t border-border">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full sm:w-1/2 border-destructive/40 text-destructive hover:bg-destructive/10 gap-1.5 h-9 text-xs font-semibold"
+                    onClick={() => handleConfirmApproval("Failed")}
+                  >
+                    <AlertTriangle className="h-4 w-4" /> Mark as FAILED
+                  </Button>
+                  <Button
+                    type="button"
+                    className="w-full sm:w-1/2 bg-success hover:bg-success/90 text-success-foreground gap-1.5 h-9 text-xs font-semibold border-0"
+                    onClick={() => handleConfirmApproval("Passed")}
+                  >
+                    <CheckCircle2 className="h-4 w-4" /> Approve as PASSED
+                  </Button>
+                </div>
+              </div>
             )}
           </DialogContent>
         </Dialog>

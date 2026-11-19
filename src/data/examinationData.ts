@@ -3,6 +3,8 @@
  * Supports Grade calculation, SGPA/CGPA evaluation, and Backlog / Supplementary Tracking
  */
 
+import { addNotification } from "@/services/notifications";
+
 export interface SubjectCourse {
   code: string;
   title: string;
@@ -41,13 +43,25 @@ export interface SemesterResult {
 export interface SupplementaryRegistration {
   id: string;
   studentId: string;
+  studentName?: string;
+  usn?: string;
   courseCode: string;
   courseTitle: string;
   examFee: number;
   registrationDate: string;
-  status: "Registered" | "Admit Card Issued" | "Cleared";
+  status: "Registered" | "Admit Card Issued" | "Under Evaluation" | "Approved - Passed" | "Approved - Failed" | "Cleared";
   receiptNumber?: string;
   paymentMethod?: string;
+  evaluatedBy?: string;
+  evaluatedDate?: string;
+  evaluationRemarks?: string;
+  retestMarks?: {
+    internal: number;
+    external: number;
+    total: number;
+    gradeLetter: string;
+    gradePoint: number;
+  };
 }
 
 export const branchCourses: SubjectCourse[] = [
@@ -333,14 +347,18 @@ export function registerSupplementaryExam(
   courseCode: string,
   courseTitle: string,
   paymentMethod: string = "UPI QR Code",
-  status: "Registered" | "Admit Card Issued" | "Cleared" = "Admit Card Issued"
+  status: SupplementaryRegistration["status"] = "Admit Card Issued",
+  studentName?: string,
+  usn?: string
 ): SupplementaryRegistration {
   const key = "campusos_supplementary_registrations";
-  const existing: SupplementaryRegistration[] = JSON.parse(localStorage.getItem(key) || "[]");
+  const existing: SupplementaryRegistration[] = getSupplementaryRegistrations();
   
   const registration: SupplementaryRegistration = {
     id: `suppl-${Date.now()}`,
     studentId,
+    studentName: studentName || (studentId === "student-5" ? "Arjun Reddy" : "Student"),
+    usn: usn || (studentId === "student-5" ? "1SI22CS005" : "1SI22CS001"),
     courseCode,
     courseTitle,
     examFee: 500,
@@ -350,8 +368,9 @@ export function registerSupplementaryExam(
     paymentMethod,
   };
 
-  existing.push(registration);
-  localStorage.setItem(key, JSON.stringify(existing));
+  const filtered = existing.filter(r => !(r.studentId === studentId && r.courseCode === courseCode));
+  filtered.push(registration);
+  localStorage.setItem(key, JSON.stringify(filtered));
   return registration;
 }
 
@@ -360,14 +379,116 @@ export function updateSupplementaryRegistrationStatus(
   newStatus: SupplementaryRegistration["status"]
 ): void {
   const key = "campusos_supplementary_registrations";
-  const existing: SupplementaryRegistration[] = JSON.parse(localStorage.getItem(key) || "[]");
+  const existing: SupplementaryRegistration[] = getSupplementaryRegistrations();
   const updated = existing.map(r => (r.id === registrationId ? { ...r, status: newStatus } : r));
   localStorage.setItem(key, JSON.stringify(updated));
 }
 
+export function approveSupplementaryExam(
+  registrationId: string,
+  decision: "Passed" | "Failed",
+  marks: { internal: number; external: number },
+  facultyName: string = "Dr. Ramesh Kumar",
+  remarks: string = ""
+): SupplementaryRegistration | null {
+  if (typeof window === "undefined" || !window.localStorage) return null;
+  const key = "campusos_supplementary_registrations";
+  const registrations = getSupplementaryRegistrations();
+  const targetIdx = registrations.findIndex(r => r.id === registrationId);
+  if (targetIdx === -1) return null;
+
+  const target = registrations[targetIdx];
+  const total = marks.internal + marks.external;
+  const { gradeLetter, gradePoint } = calculateGrade(total);
+
+  const updatedStatus: SupplementaryRegistration["status"] =
+    decision === "Passed" ? "Approved - Passed" : "Approved - Failed";
+
+  const updatedReg: SupplementaryRegistration = {
+    ...target,
+    status: updatedStatus,
+    evaluatedBy: facultyName,
+    evaluatedDate: new Date().toISOString().split("T")[0],
+    evaluationRemarks: remarks || (decision === "Passed" ? "Satisfactory performance in re-exam viva & theory." : "Unsatisfactory score in re-examination."),
+    retestMarks: {
+      internal: marks.internal,
+      external: marks.external,
+      total,
+      gradeLetter,
+      gradePoint,
+    },
+  };
+
+  registrations[targetIdx] = updatedReg;
+  localStorage.setItem(key, JSON.stringify(registrations));
+
+  // Sync marks into unified store
+  saveCourseMarksForRoster(target.courseCode, {
+    [target.studentId]: { internal: marks.internal, external: marks.external },
+  });
+
+  // Handle cleared backlogs state
+  const clearedKey = `cleared_backlogs_${target.studentId}`;
+  let clearedList: string[] = [];
+  try {
+    clearedList = JSON.parse(localStorage.getItem(clearedKey) || "[]");
+  } catch {}
+
+  if (decision === "Passed") {
+    if (!clearedList.includes(target.courseCode)) {
+      clearedList.push(target.courseCode);
+      localStorage.setItem(clearedKey, JSON.stringify(clearedList));
+    }
+    addNotification({
+      title: `Supplementary Passed: ${target.courseCode}`,
+      message: `${facultyName} approved your re-test result for ${target.courseCode}. Score: ${total}/100 (Grade ${gradeLetter}). Backlog cleared!`,
+      type: "success",
+      targetRole: "student",
+    });
+  } else {
+    clearedList = clearedList.filter(c => c !== target.courseCode);
+    localStorage.setItem(clearedKey, JSON.stringify(clearedList));
+    addNotification({
+      title: `Supplementary Evaluated: ${target.courseCode}`,
+      message: `${facultyName} evaluated your re-test for ${target.courseCode}. Score: ${total}/100 (Grade ${gradeLetter} - Fail). Backlog remains active.`,
+      type: "alert",
+      targetRole: "student",
+    });
+  }
+
+  return updatedReg;
+}
+
 export function getSupplementaryRegistrations(studentId?: string): SupplementaryRegistration[] {
   const key = "campusos_supplementary_registrations";
-  const existing: SupplementaryRegistration[] = JSON.parse(localStorage.getItem(key) || "[]");
-  if (!studentId) return existing;
-  return existing.filter(r => r.studentId === studentId);
+  if (typeof window === "undefined" || !window.localStorage) return [];
+
+  const stored = localStorage.getItem(key);
+  if (!stored) {
+    // Seed default initial retest registration for Arjun Reddy (student-5, CS202)
+    const initialSeed: SupplementaryRegistration[] = [
+      {
+        id: "suppl-seed-arjun-cs202",
+        studentId: "student-5",
+        studentName: "Arjun Reddy",
+        usn: "1SI22CS005",
+        courseCode: "CS202",
+        courseTitle: "Object Oriented Design using Java",
+        examFee: 500,
+        registrationDate: new Date(Date.now() - 2 * 86400000).toISOString().split("T")[0],
+        status: "Admit Card Issued",
+        receiptNumber: "REC-SUPPL-842910",
+        paymentMethod: "UPI QR Code (SBI Gateway)",
+      },
+    ];
+    localStorage.setItem(key, JSON.stringify(initialSeed));
+    return studentId ? initialSeed.filter(r => r.studentId === studentId) : initialSeed;
+  }
+
+  try {
+    const list: SupplementaryRegistration[] = JSON.parse(stored);
+    return studentId ? list.filter(r => r.studentId === studentId) : list;
+  } catch {
+    return [];
+  }
 }

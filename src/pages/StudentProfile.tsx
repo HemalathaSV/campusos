@@ -458,9 +458,24 @@ export default function StudentProfile() {
                                 <TableCell className="text-center font-mono text-xs font-bold text-success">₹{reg.examFee}</TableCell>
                                 <TableCell className="text-center font-mono text-xs">{reg.registrationDate}</TableCell>
                                 <TableCell className="text-center">
-                                  <Badge className="bg-info/20 text-info border-0 text-[11px]">
-                                    {reg.status}
-                                  </Badge>
+                                  <div className="flex flex-col items-center gap-0.5">
+                                    <Badge
+                                      className={`border-0 text-[11px] ${
+                                        reg.status === "Approved - Passed"
+                                          ? "bg-success/15 text-success font-semibold"
+                                          : reg.status === "Approved - Failed"
+                                          ? "bg-destructive/15 text-destructive font-semibold"
+                                          : "bg-info/15 text-info font-medium"
+                                      }`}
+                                    >
+                                      {reg.status}
+                                    </Badge>
+                                    {reg.retestMarks && (
+                                      <span className="text-[10px] text-muted-foreground font-mono">
+                                        Score: {reg.retestMarks.total}/100 ({reg.retestMarks.gradeLetter})
+                                      </span>
+                                    )}
+                                  </div>
                                 </TableCell>
                               </TableRow>
                             ))}
